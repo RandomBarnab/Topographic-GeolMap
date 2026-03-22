@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗺️</text></svg>">
+    <title>Carte Rando Pro V18</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        body, html { margin: 0; padding: 0; width: 100vw; height: 100dvh; overflow: hidden; font-family: -apple-system, sans-serif; background-color: #333; }
+        #map { width: 100%; height: 100%; cursor: crosshair; }
+
+        #search-container { position: absolute; top: 15px; left: 15px; z-index: 1000; display: flex; gap: 5px; width: calc(100% - 100px); max-width: 300px; }
+        #search-input { flex-grow: 1; padding: 10px; border: none; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); font-size: 16px; }
+        #search-btn { background: white; border: none; border-radius: 8px; padding: 0 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); cursor: pointer; }
+        
+        .controls-container { position: absolute; bottom: 25px; right: 15px; z-index: 1000; display: flex; flex-direction: column; gap: 10px; }
+        .custom-control { background-color: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); cursor: pointer; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+
+        .legend-box { background: rgba(255, 255, 255, 0.9); padding: 8px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); text-align: center; font-size: 12px; font-weight: bold; position: absolute; top: 60px; right: 15px; z-index: 1000; pointer-events: none;}
+        .color-bar { height: 100px; width: 20px; margin: 5px auto; border: 1px solid #999; border-radius: 3px; }
+
+        #settings-panel { position: absolute; top: 60px; right: 65px; width: 320px; max-height: 80vh; overflow-y: auto; background: rgba(255, 255, 255, 0.95); padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.4); z-index: 1001; display: none; flex-direction: column; gap: 15px; backdrop-filter: blur(5px); }
+        h3 { margin: 0; font-size: 16px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+        .setting-group { font-size: 13px; background: rgba(0,0,0,0.05); padding: 8px; border-radius: 8px; }
+        .setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+        input[type="color"] { border: none; width: 30px; height: 30px; border-radius: 5px; cursor: pointer; padding: 0; }
+        
+        .action-btn { background: #007AFF; color: white; border: none; padding: 8px; border-radius: 6px; width: 100%; cursor: pointer; margin-top: 5px; font-weight: bold;}
+        .action-btn.secondary { background: #e5e5ea; color: black; }
+        .close-btn { position: absolute; top: 15px; right: 15px; cursor: pointer; font-size: 18px; }
+
+        #layers-list { list-style: none; padding: 0; margin: 0; }
+        .layer-item { display: flex; align-items: stretch; border: 1px solid #ddd; background: #fff; margin-bottom: 5px; border-radius: 6px; overflow: hidden; }
+        .move-box { width: 40px; background: #f0f0f0; display: flex; flex-direction: column; align-items: center; justify-content: center; border-right: 1px solid #ddd; }
+        .move-btn { cursor: pointer; padding: 5px; font-size: 14px; user-select: none; color: #555; }
+        .move-btn:active { background: #ddd; }
+        .layer-content { padding: 8px; flex-grow: 1; display: flex; flex-direction: column; justify-content: center;}
+        .layer-header { display: flex; align-items: center; font-weight: bold; font-size: 12px; margin-bottom: 6px;}
+        .layer-controls { display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
+        .layer-controls input[type="range"] { width: 120px; }
+
+        .leaflet-popup-pane { z-index: 9999 !important; }
+        .geo-popup { font-size: 13px; line-height: 1.4; width: 300px; }
+        .geo-popup b { color: #007AFF; }
+        .geo-popup img { max-width: 100%; margin-top: 8px; border: 1px solid #ddd; }
+        
+        /* Iframe BRGM pour éviter le blocage réseau sur PC */
+        .brgm-iframe { width: 100%; height: 200px; border: 1px solid #ccc; border-radius: 4px; margin-top: 5px; background: #f9f9f9;}
+    </style>
+</head>
+<body>
+
+    <!-- MASQUE SVG MAGIQUE POUR L'EAU : Extrait l'eau et rend le reste 100% transparent -->
+    <svg width="0" height="0" style="position:absolute; z-index:-1;">
+        <filter id="water-mask" color-interpolation-filters="sRGB">
+            <feColorMatrix type="matrix" values="
+                0 0 0 0 0.1
+                0 0 0 0 0.5
+                0 0 0 0 0.9
+                -12 0 12 0 -0.5
+            "/>
+        </filter>
+    </svg>
+
+    <div id="search-container">
+        <input type="text" id="search-input" placeholder="Lieu, sommet..." onkeypress="if(event.key === 'Enter') searchPlace()">
+        <button id="search-btn" onclick="searchPlace()">🔍</button>
+    </div>
+
+    <div id="map"></div>
+    <div class="legend-box" id="legend">Calcul...</div>
+
+    <div id="settings-panel">
+        <div class="close-btn" onclick="toggleSettings()">✖</div>
+        <h3>Réglages V18</h3>
+        
+        <div class="setting-group">
+            <b>Couleurs Altimétriques</b>
+            <div class="setting-row"><span>Bas (Creux)</span> <input type="color" id="col-low"></div>
+            <div class="setting-row"><span>Moyen (Pentes)</span> <input type="color" id="col-mid"></div>
+            <div class="setting-row"><span>Haut (Pics)</span> <input type="color" id="col-high"></div>
+        </div>
+        
+        <div class="setting-group">
+            <b>Ordre des Couches (Utilisez ⬆️⬇️)</b>
+            <p style="font-size: 10px; color: #666; margin: 2px 0 8px 0;">Le calque en haut couvre les autres. <b>Double-cliquez sur la carte</b> pour les notices.</p>
+            <ul id="layers-list"></ul>
+        </div>
+
+        <button class="action-btn" onclick="document.getElementById('gpx-input').click()">📁 Importer Trace GPX</button>
+        <input type="file" id="gpx-input" accept=".gpx" style="display:none" onchange="loadGPX(event)">
+        <button class="action-btn" style="background:#34c759;" onclick="saveSettings()">💾 Sauvegarder</button>
+        <button class="action-btn secondary" onclick="resetSettings()">🔄 Remettre à zéro</button>
+    </div>
+
+    <div class="controls-container">
+        <div class="custom-control" onclick="toggleFullScreen()" title="Plein Écran">⛶</div>
+        <div class="custom-control" onclick="toggleSettings()" title="Réglages">⚙️</div>
+        <div class="custom-control" id="btn-locate" title="Me localiser">📍</div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // --- 1. CONFIGURATION STRICTE DES COUCHES ---
+        // Seules les Lignes Topo et le Relief sont actifs au démarrage.
+        let layerDefs = [
+            { id: 'top', name: 'Noms & Sentiers (GR)', type: 'group', op: 100, active: false },
+            { id: 'base_lines', name: 'Lignes Topo CSS (On Top)', type: 'topoblend', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', op: 100, active: true },
+            { id: 'water', name: 'Eau du Monde (SVG)', type: 'water_svg', url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png', op: 100, active: false },
+            { id: 'ele', name: 'Relief Dynamique', type: 'custom', op: 80, active: true },
+            { id: 'geo_fr', name: 'Géologie (France BRGM)', type: 'wms', url: 'https://geoservices.brgm.fr/geologie', wmsLayer: 'GEOLOGIE', op: 60, active: false },
+            { id: 'geo_w', name: 'Géologie (Monde)', type: 'xyz', url: 'https://tiles.macrostrat.org/carto/{z}/{x}/{y}.png', op: 60, active: false },
+            { id: 'base_full', name: 'Complete Open Topo (Fond)', type: 'xyz', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', op: 100, active: false }
+        ];
+
+        let layersObj = {};
+        let colors = { low: [60,176,67], mid: [255,235,59], high: [139,69,19] };
+
+        const map = L.map('map', { zoomControl: false, doubleClickZoom: false }).setView([45.92, 6.86], 10);
+        L.control.zoom({ position: 'bottomleft' }).addTo(map);
+        L.control.scale({ position: 'bottomleft', imperial: false }).addTo(map);
+
+        window.addEventListener('resize', () => map.invalidateSize());
+
+        // --- 2. MOTEUR D'ALTITUDE DYNAMIQUE ---
+        L.DynamicElevationLayer = L.GridLayer.extend({
+            createTile: function (coords, done) {
+                var tile = L.DomUtil.create('canvas', 'leaflet-tile');
+                tile.width = 256; tile.height = 256; 
+                var ctx = tile.getContext('2d', { willReadFrequently: true });
+                var img = new Image(); img.crossOrigin = "Anonymous";
+                img.src = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${coords.z}/${coords.x}/${coords.y}.png`;
+                img.onload = () => {
+                    ctx.drawImage(img, 0, 0); var data = ctx.getImageData(0,0,256,256).data;
+                    var elevations = new Float32Array(256 * 256);
+                    for (var i = 0; i < data.length; i += 4) elevations[i/4] = (data[i]*256 + data[i+1] + data[i+2]/256) - 32768;
+                    tile.elevations = elevations; this._drawTile(tile); done(null, tile);
+                };
+                img.onerror = () => done(null, tile); return tile;
+            },
+            onAdd: function(map) { L.GridLayer.prototype.onAdd.call(this, map); map.on('moveend', this._updateMinMax, this); },
+            onRemove: function(map) { map.off('moveend', this._updateMinMax, this); L.GridLayer.prototype.onRemove.call(this, map); },
+            _currentMin: 0, _currentMax: 1000,
+            
+            _updateMinMax: function() {
+                let min = Infinity; let max = -Infinity; let hasData = false;
+                for (let key in this._tiles) {
+                    if (this._tiles[key].el.elevations) {
+                        hasData = true;
+                        for (let i = 0; i < this._tiles[key].el.elevations.length; i+=64) {
+                            let el = this._tiles[key].el.elevations[i];
+                            if (el > -500 && el < 8850) { if (el < min) min = el; if (el > max) max = el; }
+                        }
+                    }
+                }
+                if (hasData) {
+                    if (max - min < 10) max = min + 10;
+                    this._currentMin = min; this._currentMax = max;
+                    for (let key in this._tiles) if (this._tiles[key].el.elevations) this._drawTile(this._tiles[key].el);
+                    updateLegend(min, max);
+                }
+            },
+            
+            _drawTile: function(tile) {
+                let ctx = tile.getContext('2d'); let imgData = ctx.createImageData(256, 256); let data = imgData.data;
+                let min = this._currentMin; let max = this._currentMax;
+                let cL = colors.low, cM = colors.mid, cH = colors.high;
+
+                for (let i = 0; i < tile.elevations.length; i++) {
+                    let el = tile.elevations[i];
+                    let t = (el - min) / (max - min); 
+                    if (t < 0) t = 0; if (t > 1) t = 1;
+
+                    let r, g, b;
+                    if (t < 0.5) { 
+                        let lt = t * 2; r = cL[0] + (cM[0] - cL[0]) * lt; g = cL[1] + (cM[1] - cL[1]) * lt; b = cL[2] + (cM[2] - cL[2]) * lt; 
+                    } else { 
+                        let lt = (t - 0.5) * 2; r = cM[0] + (cH[0] - cM[0]) * lt; g = cM[1] + (cH[1] - cM[1]) * lt; b = cM[2] + (cH[2] - cM[2]) * lt; 
+                    }
+
+                    // TIBET FIX : Blanchiment à 25% max
+                    if (min > 2000) {
+                        let frost = Math.min((min - 2000) / 6000, 0.25); 
+                        r += (255 - r) * frost; g += (255 - g) * frost; b += (255 - b) * frost;
+                    }
+
+                    let brightness = 0.5 + (t * 0.7); 
+                    data[i*4] = Math.min(255, r * brightness); 
+                    data[i*4+1] = Math.min(255, g * brightness); 
+                    data[i*4+2] = Math.min(255, b * brightness); 
+                    data[i*4+3] = 255;
+                }
+                ctx.putImageData(imgData, 0, 0);
+            }
+        });
+
+        // --- 3. GESTION DES Z-INDEX ET DES FILTRES INFAILLIBLES ---
+        function initLayers() {
+            layerDefs.forEach((def, index) => {
+                if(!map.getPane(`pane_${def.id}`)) {
+                    map.createPane(`pane_${def.id}`);
+                    
+                    // FILTRE LIGNES TOPO
+                    if(def.type === 'topoblend') {
+                        map.getPane(`pane_${def.id}`).style.filter = "grayscale(100%) brightness(105%) contrast(150%)";
+                        map.getPane(`pane_${def.id}`).style.mixBlendMode = "multiply";
+                    }
+                    
+                    // FILTRE EAU SVG : Rend tout ce qui n'est pas bleu purement transparent, bypass total de sécurité PC !
+                    if(def.type === 'water_svg') {
+                        map.getPane(`pane_${def.id}`).style.filter = "url(#water-mask)";
+                    }
+                }
+                
+                if(!layersObj[def.id]) {
+                    let l;
+                    if(def.type === 'xyz' || def.type === 'topoblend' || def.type === 'water_svg') {
+                        l = L.tileLayer(def.url, { maxZoom: 18, pane: `pane_${def.id}` });
+                    }
+                    else if(def.type === 'wms') l = L.tileLayer.wms(def.url, { layers: def.wmsLayer, format: 'image/png', transparent: true, pane: `pane_${def.id}` });
+                    else if(def.type === 'group') {
+                        l = L.layerGroup([
+                            L.tileLayer('https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png', { maxZoom: 18, pane: `pane_${def.id}` }),
+                            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', { maxZoom: 20, pane: `pane_${def.id}` })
+                        ]);
+                    } 
+                    else if(def.type === 'custom') l = new L.DynamicElevationLayer({ pane: `pane_${def.id}` });
+                    layersObj[def.id] = l;
+                }
+                
+                if(def.active && !map.hasLayer(layersObj[def.id])) layersObj[def.id].addTo(map);
+                else if(!def.active && map.hasLayer(layersObj[def.id])) map.removeLayer(layersObj[def.id]);
+                setLayerOpacity(def.id, def.op);
+            });
+            updateZIndexes(); renderLayerList();
+        }
+
+        function updateZIndexes() { let z = 400; layerDefs.forEach(def => { map.getPane(`pane_${def.id}`).style.zIndex = z; z -= 10; }); }
+
+        function moveLayer(index, direction) {
+            if (direction === -1 && index > 0) { 
+                let temp = layerDefs[index]; layerDefs[index] = layerDefs[index - 1]; layerDefs[index - 1] = temp;
+            } else if (direction === 1 && index < layerDefs.length - 1) {
+                let temp = layerDefs[index]; layerDefs[index] = layerDefs[index + 1]; layerDefs[index + 1] = temp;
+            }
+            updateZIndexes(); renderLayerList();
+        }
+
+        function renderLayerList() {
+            const list = document.getElementById('layers-list'); list.innerHTML = '';
+            layerDefs.forEach((def, index) => {
+                const li = document.createElement('li'); li.className = 'layer-item';
+                const moveBox = document.createElement('div'); moveBox.className = 'move-box';
+                moveBox.innerHTML = `<div class="move-btn" onclick="moveLayer(${index}, -1)">⬆️</div><div class="move-btn" onclick="moveLayer(${index}, 1)">⬇️</div>`;
+                const contentBox = document.createElement('div'); contentBox.className = 'layer-content';
+                contentBox.innerHTML = `
+                    <div class="layer-header"><label><input type="checkbox" onchange="toggleLayer('${def.id}', this.checked)" ${def.active ? 'checked' : ''}> ${def.name}</label></div>
+                    <div class="layer-controls"><span>Opacité:</span><input type="range" min="0" max="100" value="${def.op}" oninput="setLayerOpacity('${def.id}', this.value)"></div>
+                `;
+                li.appendChild(moveBox); li.appendChild(contentBox); list.appendChild(li);
+            });
+        }
+
+        function toggleLayer(id, active) { layerDefs.find(d => d.id === id).active = active; if(active) layersObj[id].addTo(map); else map.removeLayer(layersObj[id]); }
+        function setLayerOpacity(id, op) { layerDefs.find(d => d.id === id).op = op; const l = layersObj[id]; if(l.setOpacity) l.setOpacity(op / 100); else if(l.eachLayer) l.eachLayer(subL => subL.setOpacity(op / 100)); }
+
+        // --- 4. DOUBLE-CLIC : POPUP BRGM IFRAME (FIN DES ERREURS RÉSEAU) ---
+        map.on('dblclick', async function(e) {
+            const geoWorldActive = layerDefs.find(l => l.id === 'geo_w' && l.active);
+            const geoFrActive = layerDefs.find(l => l.id === 'geo_fr' && l.active);
+
+            let popupHtml = `<div class="geo-popup">`;
+
+            if (geoWorldActive) {
+                try {
+                    // Macrostrat autorise l'interrogation mondiale sans blocage
+                    const res = await fetch(`https://macrostrat.org/api/v2/geologic_units/map?lat=${e.latlng.lat}&lng=${e.latlng.lng}`);
+                    const data = await res.json();
+                    if(data.success && data.success.data.length > 0) {
+                        const unit = data.success.data[0];
+                        popupHtml += `<b>🌍 Géo Monde :</b><br><b>Ère :</b> ${unit.b_age} à ${unit.t_age} Ma<br><b>Roche :</b> ${unit.lith || 'Inconnu'}<br><br>`;
+                    }
+                } catch(err) {}
+            }
+
+            if (geoFrActive) {
+                const legendUrl = `https://geoservices.brgm.fr/geologie?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetLegendGraphic&FORMAT=image/png&LAYER=GEOLOGIE`;
+                popupHtml += `<b>🇫🇷 Légende BRGM :</b><br><img src="${legendUrl}" alt="BRGM"><br>`;
+                
+                // SOLUTION BRGM : On n'utilise plus de code 'fetch' javascript qui se fait bloquer par le PC.
+                // On met l'URL directement dans un navigateur intégré (Iframe). Il charge la page WMS nativement !
+                const size = map.getSize(); const bounds = map.getBounds();
+                const bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
+                const pt = map.latLngToContainerPoint(e.latlng);
+                
+                const infoUrl = `https://geoservices.brgm.fr/geologie?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetFeatureInfo&FORMAT=image/png&TRANSPARENT=true&QUERY_LAYERS=SCAN_GEOL50&LAYERS=SCAN_GEOL50&INFO_FORMAT=text/html&I=${Math.round(pt.x)}&J=${Math.round(pt.y)}&WIDTH=${size.x}&HEIGHT=${size.y}&CRS=EPSG:4326&BBOX=${bbox}`;
+                
+                popupHtml += `<b>Notice détaillée du sol :</b><br><iframe class="brgm-iframe" src="${infoUrl}"></iframe>`;
+            }
+
+            if(!geoWorldActive && !geoFrActive) popupHtml += `<i style="font-size:11px; color:#666;">Cochez une couche géologique pour analyser le sol.</i>`;
+
+            L.popup().setLatLng(e.latlng).setContent(popupHtml + `</div>`).openOn(map);
+        });
+
+        // --- 5. UTILITAIRES ---
+        function hexToRgb(h) { let b=parseInt(h.substring(1),16); return [(b>>16)&255, (b>>8)&255, b&255]; }
+        function rgbToHex(r,g,b) { return "#" + (1<<24 | r<<16 | g<<8 | b).toString(16).slice(1); }
+
+        function applyColors() {
+            colors.low = hexToRgb(document.getElementById('col-low').value);
+            colors.mid = hexToRgb(document.getElementById('col-mid').value);
+            colors.high = hexToRgb(document.getElementById('col-high').value);
+            if(layersObj['ele']) layersObj['ele']._updateMinMax();
+        }
+        ['col-low', 'col-mid', 'col-high'].forEach(id => document.getElementById(id).addEventListener('input', applyColors));
+
+        function saveSettings() {
+            const data = { layerDefs: layerDefs.map(d => ({id: d.id, active: d.active, op: d.op})), colLow: document.getElementById('col-low').value, colMid: document.getElementById('col-mid').value, colHigh: document.getElementById('col-high').value };
+            localStorage.setItem('mapRandoV18', JSON.stringify(data)); alert("Sauvegardé !");
+        }
+
+        function loadSettings() {
+            const saved = JSON.parse(localStorage.getItem('mapRandoV18'));
+            if(saved) {
+                const newDefs = [];
+                saved.layerDefs.forEach(s => { const d = layerDefs.find(x => x.id === s.id); if(d){ d.active=s.active; d.op=s.op; newDefs.push(d);} });
+                layerDefs = newDefs;
+                document.getElementById('col-low').value = saved.colLow; document.getElementById('col-mid').value = saved.colMid; document.getElementById('col-high').value = saved.colHigh;
+            } else {
+                document.getElementById('col-low').value = rgbToHex(...colors.low); document.getElementById('col-mid').value = rgbToHex(...colors.mid); document.getElementById('col-high').value = rgbToHex(...colors.high);
+            }
+            initLayers(); applyColors();
+        }
+
+        function resetSettings() { if(confirm("Effacer vos paramètres ?")) { localStorage.removeItem('mapRandoV18'); location.reload(); } }
+        function toggleSettings() { const p = document.getElementById('settings-panel'); p.style.display = p.style.display === 'flex' ? 'none' : 'flex'; }
+        
+        function updateLegend(min, max) { 
+            const grad = `linear-gradient(to top, ${document.getElementById('col-low').value}, ${document.getElementById('col-mid').value}, ${document.getElementById('col-high').value})`;
+            document.getElementById('legend').innerHTML = `<div>${Math.round(max)}m</div><div class="color-bar" style="background: ${grad}"></div><div>${Math.round(min)}m</div>`; 
+        }
+
+        async function searchPlace() {
+            const q = document.getElementById('search-input').value; if(!q) return;
+            try { const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`); const data = await res.json();
+                if(data.length > 0) map.flyTo([data[0].lat, data[0].lon], 13);
+            } catch(e) {}
+        }
+
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) { document.documentElement.requestFullscreen().catch(e => alert("Mode plein écran non supporté.")); } 
+            else { if (document.exitFullscreen) document.exitFullscreen(); }
+        }
+
+        document.getElementById('btn-locate').onclick = function() { 
+            document.getElementById('btn-locate').innerText = "⏳";
+            map.locate({setView: true, maxZoom: 14, enableHighAccuracy: true, timeout: 10000}); 
+        };
+        let uMarker; 
+        map.on('locationfound', function(e) { 
+            document.getElementById('btn-locate').innerText = "📍";
+            if(uMarker) map.removeLayer(uMarker); 
+            uMarker = L.circleMarker(e.latlng, {radius: 8, fillColor: "#007AFF", color: "#fff", weight: 3, fillOpacity: 1, pane: 'pane_top'}).addTo(map); 
+        });
+        map.on('locationerror', function(e) {
+            document.getElementById('btn-locate').innerText = "📍";
+            alert("Erreur GPS : Autorisez la localisation.");
+        });
+
+        let gpxLayer;
+        function loadGPX(e) {
+            const file = e.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                const trackpoints = new DOMParser().parseFromString(evt.target.result, "text/xml").getElementsByTagName("trkpt");
+                const latlngs = Array.from(trackpoints).map(p => [parseFloat(p.getAttribute("lat")), parseFloat(p.getAttribute("lon"))]);
+                if(latlngs.length > 0) {
+                    if(gpxLayer) map.removeLayer(gpxLayer);
+                    map.createPane('pane_gpx'); map.getPane('pane_gpx').style.zIndex = 400; 
+                    gpxLayer = L.polyline(latlngs, {color: 'red', weight: 4, pane: 'pane_gpx'}).addTo(map);
+                    map.fitBounds(gpxLayer.getBounds()); toggleSettings();
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        loadSettings();
+    </script>
+</body>
+</html>
