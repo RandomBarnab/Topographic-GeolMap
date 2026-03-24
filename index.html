@@ -6,7 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗺️</text></svg>">
-    <title>Carte Rando Pro V18</title>
+    <title>Carte Rando Pro V19</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
@@ -19,7 +19,7 @@
         #search-btn { background: white; border: none; border-radius: 8px; padding: 0 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); cursor: pointer; }
         
         .controls-container { position: absolute; bottom: 25px; right: 15px; z-index: 1000; display: flex; flex-direction: column; gap: 10px; }
-        .custom-control { background-color: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); cursor: pointer; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+        .custom-control { background-color: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); cursor: pointer; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 20px; user-select: none; }
 
         .legend-box { background: rgba(255, 255, 255, 0.9); padding: 8px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); text-align: center; font-size: 12px; font-weight: bold; position: absolute; top: 60px; right: 15px; z-index: 1000; pointer-events: none;}
         .color-bar { height: 100px; width: 20px; margin: 5px auto; border: 1px solid #999; border-radius: 3px; }
@@ -49,22 +49,24 @@
         .geo-popup b { color: #007AFF; }
         .geo-popup img { max-width: 100%; margin-top: 8px; border: 1px solid #ddd; }
         
-        /* Iframe BRGM pour éviter le blocage réseau sur PC */
         .brgm-iframe { width: 100%; height: 200px; border: 1px solid #ccc; border-radius: 4px; margin-top: 5px; background: #f9f9f9;}
+        #profile-canvas { margin-top: 8px; border-radius: 4px; border: 1px solid #ccc; background: #fff; }
     </style>
 </head>
 <body>
 
-    <!-- MASQUE SVG MAGIQUE POUR L'EAU : Extrait l'eau et rend le reste 100% transparent -->
-    <svg width="0" height="0" style="position:absolute; z-index:-1;">
-        <filter id="water-mask" color-interpolation-filters="sRGB">
-            <feColorMatrix type="matrix" values="
-                0 0 0 0 0.1
-                0 0 0 0 0.5
-                0 0 0 0 0.9
-                -12 0 12 0 -0.5
-            "/>
-        </filter>
+    <!-- MASQUE SVG FIX SAFARI : Ajout des defs pour compatibilité iOS -->
+    <svg width="0" height="0" style="position:absolute; z-index:-1; pointer-events:none;">
+        <defs>
+            <filter id="water-mask" color-interpolation-filters="sRGB">
+                <feColorMatrix type="matrix" values="
+                    0 0 0 0 0.1
+                    0 0 0 0 0.5
+                    0 0 0 0 0.9
+                    -12 0 12 0 -0.5
+                "/>
+            </filter>
+        </defs>
     </svg>
 
     <div id="search-container">
@@ -77,7 +79,7 @@
 
     <div id="settings-panel">
         <div class="close-btn" onclick="toggleSettings()">✖</div>
-        <h3>Réglages V18</h3>
+        <h3>Réglages V19</h3>
         
         <div class="setting-group">
             <b>Couleurs Altimétriques</b>
@@ -98,20 +100,23 @@
         <button class="action-btn secondary" onclick="resetSettings()">🔄 Remettre à zéro</button>
     </div>
 
-    <div class="controls-container">
+    <!-- Nouveaux outils ajoutés ici -->
+    <div class="controls-container" onmousedown="event.stopPropagation()" ondblclick="event.stopPropagation()">
+        <div class="custom-control" id="btn-ruler" onclick="toggleRuler()" title="Règle (Distance et Profil de Dénivelé)">📏</div>
+        <div class="custom-control" id="btn-pencil" onclick="togglePencil()" title="Crayon (Sélectionner une zone de relief)">✏️</div>
         <div class="custom-control" onclick="toggleFullScreen()" title="Plein Écran">⛶</div>
         <div class="custom-control" onclick="toggleSettings()" title="Réglages">⚙️</div>
-        <div class="custom-control" id="btn-locate" title="Me localiser">📍</div>
+        <div class="custom-control" id="btn-locate" onclick="locateUser()" title="Me localiser">📍</div>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         // --- 1. CONFIGURATION STRICTE DES COUCHES ---
-        // Seules les Lignes Topo et le Relief sont actifs au démarrage.
+        // Nouveaux réglages par défaut : Topo (75%) > Eau (100%) > Relief (80%)
         let layerDefs = [
             { id: 'top', name: 'Noms & Sentiers (GR)', type: 'group', op: 100, active: false },
-            { id: 'base_lines', name: 'Lignes Topo CSS (On Top)', type: 'topoblend', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', op: 100, active: true },
-            { id: 'water', name: 'Eau du Monde (SVG)', type: 'water_svg', url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png', op: 100, active: false },
+            { id: 'base_lines', name: 'Lignes Topo CSS (On Top)', type: 'topoblend', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', op: 75, active: true },
+            { id: 'water', name: 'Eau du Monde (SVG)', type: 'water_svg', url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png', op: 100, active: true },
             { id: 'ele', name: 'Relief Dynamique', type: 'custom', op: 80, active: true },
             { id: 'geo_fr', name: 'Géologie (France BRGM)', type: 'wms', url: 'https://geoservices.brgm.fr/geologie', wmsLayer: 'GEOLOGIE', op: 60, active: false },
             { id: 'geo_w', name: 'Géologie (Monde)', type: 'xyz', url: 'https://tiles.macrostrat.org/carto/{z}/{x}/{y}.png', op: 60, active: false },
@@ -145,19 +150,26 @@
             },
             onAdd: function(map) { L.GridLayer.prototype.onAdd.call(this, map); map.on('moveend', this._updateMinMax, this); },
             onRemove: function(map) { map.off('moveend', this._updateMinMax, this); L.GridLayer.prototype.onRemove.call(this, map); },
-            _currentMin: 0, _currentMax: 1000,
+            _currentMin: 0, _currentMax: 1000, _lockedMin: null, _lockedMax: null,
             
             _updateMinMax: function() {
                 let min = Infinity; let max = -Infinity; let hasData = false;
-                for (let key in this._tiles) {
-                    if (this._tiles[key].el.elevations) {
-                        hasData = true;
-                        for (let i = 0; i < this._tiles[key].el.elevations.length; i+=64) {
-                            let el = this._tiles[key].el.elevations[i];
-                            if (el > -500 && el < 8850) { if (el < min) min = el; if (el > max) max = el; }
+                
+                // Si l'utilisateur a utilisé le crayon, on se limite à sa zone
+                if (this._lockedMin !== null && this._lockedMax !== null) {
+                    min = this._lockedMin; max = this._lockedMax; hasData = true;
+                } else {
+                    for (let key in this._tiles) {
+                        if (this._tiles[key].el.elevations) {
+                            hasData = true;
+                            for (let i = 0; i < this._tiles[key].el.elevations.length; i+=64) {
+                                let el = this._tiles[key].el.elevations[i];
+                                if (el > -500 && el < 8850) { if (el < min) min = el; if (el > max) max = el; }
+                            }
                         }
                     }
                 }
+                
                 if (hasData) {
                     if (max - min < 10) max = min + 10;
                     this._currentMin = min; this._currentMax = max;
@@ -183,7 +195,6 @@
                         let lt = (t - 0.5) * 2; r = cM[0] + (cH[0] - cM[0]) * lt; g = cM[1] + (cH[1] - cM[1]) * lt; b = cM[2] + (cH[2] - cM[2]) * lt; 
                     }
 
-                    // TIBET FIX : Blanchiment à 25% max
                     if (min > 2000) {
                         let frost = Math.min((min - 2000) / 6000, 0.25); 
                         r += (255 - r) * frost; g += (255 - g) * frost; b += (255 - b) * frost;
@@ -205,15 +216,15 @@
                 if(!map.getPane(`pane_${def.id}`)) {
                     map.createPane(`pane_${def.id}`);
                     
-                    // FILTRE LIGNES TOPO
                     if(def.type === 'topoblend') {
                         map.getPane(`pane_${def.id}`).style.filter = "grayscale(100%) brightness(105%) contrast(150%)";
                         map.getPane(`pane_${def.id}`).style.mixBlendMode = "multiply";
                     }
                     
-                    // FILTRE EAU SVG : Rend tout ce qui n'est pas bleu purement transparent, bypass total de sécurité PC !
                     if(def.type === 'water_svg') {
                         map.getPane(`pane_${def.id}`).style.filter = "url(#water-mask)";
+                        // Fix Safari iOS
+                        map.getPane(`pane_${def.id}`).style.setProperty('-webkit-filter', 'url(#water-mask)');
                     }
                 }
                 
@@ -269,8 +280,169 @@
         function toggleLayer(id, active) { layerDefs.find(d => d.id === id).active = active; if(active) layersObj[id].addTo(map); else map.removeLayer(layersObj[id]); }
         function setLayerOpacity(id, op) { layerDefs.find(d => d.id === id).op = op; const l = layersObj[id]; if(l.setOpacity) l.setOpacity(op / 100); else if(l.eachLayer) l.eachLayer(subL => subL.setOpacity(op / 100)); }
 
-        // --- 4. DOUBLE-CLIC : POPUP BRGM IFRAME (FIN DES ERREURS RÉSEAU) ---
+        // --- 4. GESTION DES OUTILS : CRAYON & RÈGLE ---
+        let pencilActive = false, drawStart = null, drawRect = null;
+        let rulerActive = false, rulerPts = [], rulerLine = null, rulerMarkers = [];
+
+        function togglePencil() {
+            pencilActive = !pencilActive;
+            document.getElementById('btn-pencil').style.background = pencilActive ? '#ddd' : 'white';
+            if (pencilActive && rulerActive) toggleRuler(); // Ferme l'outil Règle si ouvert
+            
+            if (!pencilActive) {
+                if (drawRect) { map.removeLayer(drawRect); drawRect = null; }
+                let eleL = layersObj['ele'];
+                if(eleL) { eleL._lockedMin = null; eleL._lockedMax = null; eleL._updateMinMax(); }
+            }
+            map._container.style.cursor = pencilActive ? 'crosshair' : '';
+            if(pencilActive) map.dragging.disable(); else map.dragging.enable();
+        }
+
+        function toggleRuler() {
+            rulerActive = !rulerActive;
+            document.getElementById('btn-ruler').style.background = rulerActive ? '#ddd' : 'white';
+            if (rulerActive && pencilActive) togglePencil(); // Ferme l'outil Crayon si ouvert
+            
+            if (!rulerActive) {
+                if(rulerLine) map.removeLayer(rulerLine);
+                rulerMarkers.forEach(m => map.removeLayer(m));
+                rulerPts = []; rulerLine = null; rulerMarkers = [];
+            }
+            map._container.style.cursor = rulerActive ? 'crosshair' : '';
+        }
+
+        map.on('mousedown', function(e) {
+            if(pencilActive) {
+                drawStart = e.latlng;
+                if(drawRect) map.removeLayer(drawRect);
+                drawRect = L.rectangle([drawStart, drawStart], {color: "#ff7800", weight: 2, fillOpacity: 0.2, pane:'pane_top'}).addTo(map);
+            }
+        });
+
+        map.on('mousemove', function(e) {
+            if(pencilActive && drawStart && drawRect) { drawRect.setBounds([drawStart, e.latlng]); }
+        });
+
+        map.on('mouseup', function(e) {
+            if(pencilActive && drawStart && drawRect) {
+                let bounds = drawRect.getBounds();
+                drawStart = null; pencilActive = false;
+                document.getElementById('btn-pencil').style.background = 'white';
+                map.dragging.enable(); map._container.style.cursor = '';
+                
+                let min = Infinity, max = -Infinity;
+                let eleL = layersObj['ele'];
+                if(eleL) {
+                    for (let key in eleL._tiles) {
+                        let tile = eleL._tiles[key];
+                        if (!tile.el.elevations) continue;
+                        let coords = tile.coords;
+                        let nwPoint = coords.scaleBy(new L.Point(256, 256));
+                        for (let i = 0; i < tile.el.elevations.length; i += 16) {
+                            let el = tile.el.elevations[i];
+                            if (el > -500 && el < 8850) {
+                                let x = i % 256; let y = Math.floor(i / 256);
+                                let latlng = map.unproject(nwPoint.add(new L.Point(x, y)), coords.z);
+                                if (bounds.contains(latlng)) {
+                                    if (el < min) min = el; if (el > max) max = el;
+                                }
+                            }
+                        }
+                    }
+                    if (min < Infinity && max > -Infinity) {
+                        if (max - min < 10) max = min + 10;
+                        eleL._lockedMin = min; eleL._lockedMax = max;
+                        eleL._updateMinMax();
+                    } else {
+                        map.removeLayer(drawRect); drawRect = null; alert("Aucune donnée d'altitude dans cette zone.");
+                    }
+                }
+            }
+        });
+
+        map.on('click', function(e) {
+            if(rulerActive) {
+                rulerPts.push(e.latlng);
+                let m = L.circleMarker(e.latlng, {radius: 4, color: '#007AFF', fillColor: 'white', fillOpacity: 1, pane:'pane_top'}).addTo(map);
+                rulerMarkers.push(m);
+                if(rulerPts.length > 1) {
+                    if(rulerLine) map.removeLayer(rulerLine);
+                    rulerLine = L.polyline(rulerPts, {color: '#007AFF', weight: 4, pane:'pane_top'}).addTo(map);
+                }
+            }
+        });
+
+        async function finishRuler() {
+            let dist = 0;
+            for(let i=0; i<rulerPts.length-1; i++) { dist += rulerPts[i].distanceTo(rulerPts[i+1]); }
+            let distStr = dist > 1000 ? (dist/1000).toFixed(2) + " km" : Math.round(dist) + " m";
+            
+            let popup = L.popup().setLatLng(rulerPts[rulerPts.length-1])
+                .setContent(`<b>Distance : ${distStr}</b><br><i style="font-size:10px">Calcul du profil en cours...</i>`).openOn(map);
+                
+            // Echantillonage pour profil altimétrique
+            let samples = [rulerPts[0]];
+            let totalPoints = 50; let step = dist / totalPoints;
+            let currentDist = 0; let pIdx = 0;
+            let segDist = rulerPts[0].distanceTo(rulerPts[1]);
+            
+            for(let i=1; i<=totalPoints; i++) {
+                let target = i * step;
+                while(target > currentDist + segDist && pIdx < rulerPts.length - 2) {
+                    currentDist += segDist; pIdx++;
+                    segDist = rulerPts[pIdx].distanceTo(rulerPts[pIdx+1]);
+                }
+                let ratio = segDist > 0 ? (target - currentDist) / segDist : 0;
+                if (ratio > 1) ratio = 1;
+                let lat = rulerPts[pIdx].lat + (rulerPts[pIdx+1].lat - rulerPts[pIdx].lat) * ratio;
+                let lng = rulerPts[pIdx].lng + (rulerPts[pIdx+1].lng - rulerPts[pIdx].lng) * ratio;
+                samples.push(L.latLng(lat, lng));
+            }
+            
+            let locs = samples.map(p => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|');
+            try {
+                let res = await fetch(`https://api.opentopodata.org/v1/srtm90m?locations=${locs}`);
+                let data = await res.json();
+                let elevations = data.results.map(r => r.elevation);
+                
+                let w = 260, h = 100;
+                let minE = Math.min(...elevations); let maxE = Math.max(...elevations);
+                let range = maxE - minE; if(range === 0) range = 1;
+                
+                let canvas = document.createElement('canvas');
+                canvas.id = 'profile-canvas'; canvas.width = w; canvas.height = h;
+                let ctx = canvas.getContext('2d');
+                
+                ctx.beginPath(); ctx.moveTo(0, h);
+                for(let i=0; i<elevations.length; i++) {
+                    let x = (i / (elevations.length-1)) * w;
+                    let y = h - ((elevations[i] - minE) / range) * (h - 20) - 10;
+                    ctx.lineTo(x, y);
+                }
+                ctx.lineTo(w, h);
+                ctx.fillStyle = 'rgba(0, 122, 255, 0.3)'; ctx.fill();
+                ctx.strokeStyle = '#007AFF'; ctx.stroke();
+                
+                ctx.fillStyle = 'black'; ctx.font = '10px Arial';
+                ctx.fillText(Math.round(maxE)+'m', 5, 15);
+                ctx.fillText(Math.round(minE)+'m', 5, h - 5);
+                
+                let container = document.createElement('div');
+                container.innerHTML = `<b>Distance : ${distStr}</b><br><div style="font-size:11px; color:#555;">Dénivelé: Min ${Math.round(minE)}m / Max ${Math.round(maxE)}m</div>`;
+                container.appendChild(canvas);
+                popup.setContent(container);
+            } catch(err) {
+                popup.setContent(`<b>Distance : ${distStr}</b><br><i style="font-size:10px; color:red;">Erreur génération du profil.</i>`);
+            }
+            
+            rulerActive = false; document.getElementById('btn-ruler').style.background = 'white'; map._container.style.cursor = '';
+        }
+
+        // --- 5. DOUBLE-CLIC : POPUP BRGM IFRAME ---
         map.on('dblclick', async function(e) {
+            if (rulerActive && rulerPts.length > 1) { finishRuler(); return; }
+            if (pencilActive) return;
+
             const geoWorldActive = layerDefs.find(l => l.id === 'geo_w' && l.active);
             const geoFrActive = layerDefs.find(l => l.id === 'geo_fr' && l.active);
 
@@ -278,7 +450,6 @@
 
             if (geoWorldActive) {
                 try {
-                    // Macrostrat autorise l'interrogation mondiale sans blocage
                     const res = await fetch(`https://macrostrat.org/api/v2/geologic_units/map?lat=${e.latlng.lat}&lng=${e.latlng.lng}`);
                     const data = await res.json();
                     if(data.success && data.success.data.length > 0) {
@@ -292,8 +463,6 @@
                 const legendUrl = `https://geoservices.brgm.fr/geologie?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetLegendGraphic&FORMAT=image/png&LAYER=GEOLOGIE`;
                 popupHtml += `<b>🇫🇷 Légende BRGM :</b><br><img src="${legendUrl}" alt="BRGM"><br>`;
                 
-                // SOLUTION BRGM : On n'utilise plus de code 'fetch' javascript qui se fait bloquer par le PC.
-                // On met l'URL directement dans un navigateur intégré (Iframe). Il charge la page WMS nativement !
                 const size = map.getSize(); const bounds = map.getBounds();
                 const bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
                 const pt = map.latLngToContainerPoint(e.latlng);
@@ -308,7 +477,7 @@
             L.popup().setLatLng(e.latlng).setContent(popupHtml + `</div>`).openOn(map);
         });
 
-        // --- 5. UTILITAIRES ---
+        // --- 6. UTILITAIRES ---
         function hexToRgb(h) { let b=parseInt(h.substring(1),16); return [(b>>16)&255, (b>>8)&255, b&255]; }
         function rgbToHex(r,g,b) { return "#" + (1<<24 | r<<16 | g<<8 | b).toString(16).slice(1); }
 
@@ -322,11 +491,11 @@
 
         function saveSettings() {
             const data = { layerDefs: layerDefs.map(d => ({id: d.id, active: d.active, op: d.op})), colLow: document.getElementById('col-low').value, colMid: document.getElementById('col-mid').value, colHigh: document.getElementById('col-high').value };
-            localStorage.setItem('mapRandoV18', JSON.stringify(data)); alert("Sauvegardé !");
+            localStorage.setItem('mapRandoV19', JSON.stringify(data)); alert("Sauvegardé !");
         }
 
         function loadSettings() {
-            const saved = JSON.parse(localStorage.getItem('mapRandoV18'));
+            const saved = JSON.parse(localStorage.getItem('mapRandoV19')); // CLÉ MODIFIÉE POUR APPLIQUER LES DEFAULTS
             if(saved) {
                 const newDefs = [];
                 saved.layerDefs.forEach(s => { const d = layerDefs.find(x => x.id === s.id); if(d){ d.active=s.active; d.op=s.op; newDefs.push(d);} });
@@ -338,7 +507,7 @@
             initLayers(); applyColors();
         }
 
-        function resetSettings() { if(confirm("Effacer vos paramètres ?")) { localStorage.removeItem('mapRandoV18'); location.reload(); } }
+        function resetSettings() { if(confirm("Effacer vos paramètres ?")) { localStorage.removeItem('mapRandoV19'); location.reload(); } }
         function toggleSettings() { const p = document.getElementById('settings-panel'); p.style.display = p.style.display === 'flex' ? 'none' : 'flex'; }
         
         function updateLegend(min, max) { 
@@ -358,10 +527,11 @@
             else { if (document.exitFullscreen) document.exitFullscreen(); }
         }
 
-        document.getElementById('btn-locate').onclick = function() { 
+        function locateUser() { 
             document.getElementById('btn-locate').innerText = "⏳";
             map.locate({setView: true, maxZoom: 14, enableHighAccuracy: true, timeout: 10000}); 
         };
+
         let uMarker; 
         map.on('locationfound', function(e) { 
             document.getElementById('btn-locate').innerText = "📍";
@@ -370,7 +540,6 @@
         });
         map.on('locationerror', function(e) {
             document.getElementById('btn-locate').innerText = "📍";
-            alert("Erreur GPS : Autorisez la localisation.");
         });
 
         let gpxLayer;
@@ -391,6 +560,10 @@
         }
 
         loadSettings();
+        
+        // --- 7. ACTIONS AU DÉMARRAGE ---
+        // Lancer la géolocalisation automatiquement à l'ouverture
+        locateUser();
     </script>
 </body>
 </html>
