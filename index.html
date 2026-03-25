@@ -6,7 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗺️</text></svg>">
-    <title>Carte Rando Pro V19</title>
+    <title>Carte Rando Pro V33</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
@@ -21,8 +21,13 @@
         .controls-container { position: absolute; bottom: 25px; right: 15px; z-index: 1000; display: flex; flex-direction: column; gap: 10px; }
         .custom-control { background-color: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); cursor: pointer; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 20px; user-select: none; }
 
+        .presets-container { position: absolute; bottom: 25px; left: 60px; z-index: 1000; display: flex; gap: 8px; }
+        .preset-btn { background-color: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); cursor: pointer; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: bold; border: none; padding: 0 12px; }
+        .preset-btn:active { background: #e0e0e0; }
+
         .legend-box { background: rgba(255, 255, 255, 0.9); padding: 8px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); text-align: center; font-size: 12px; font-weight: bold; position: absolute; top: 60px; right: 15px; z-index: 1000; pointer-events: none;}
         .color-bar { height: 100px; width: 20px; margin: 5px auto; border: 1px solid #999; border-radius: 3px; }
+        .unlock-btn { pointer-events: auto; cursor: pointer; display: inline-block; margin-left: 3px; font-size: 14px; background: rgba(255,0,0,0.1); border-radius: 4px; padding: 2px; }
 
         #settings-panel { position: absolute; top: 60px; right: 65px; width: 320px; max-height: 80vh; overflow-y: auto; background: rgba(255, 255, 255, 0.95); padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.4); z-index: 1001; display: none; flex-direction: column; gap: 15px; backdrop-filter: blur(5px); }
         h3 { margin: 0; font-size: 16px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
@@ -32,13 +37,12 @@
         
         .action-btn { background: #007AFF; color: white; border: none; padding: 8px; border-radius: 6px; width: 100%; cursor: pointer; margin-top: 5px; font-weight: bold;}
         .action-btn.secondary { background: #e5e5ea; color: black; }
-        .close-btn { position: absolute; top: 15px; right: 15px; cursor: pointer; font-size: 18px; }
+        .close-btn { cursor: pointer; font-size: 18px; font-weight: bold; color: #555; padding: 0 8px; }
 
         #layers-list { list-style: none; padding: 0; margin: 0; }
         .layer-item { display: flex; align-items: stretch; border: 1px solid #ddd; background: #fff; margin-bottom: 5px; border-radius: 6px; overflow: hidden; }
         .move-box { width: 40px; background: #f0f0f0; display: flex; flex-direction: column; align-items: center; justify-content: center; border-right: 1px solid #ddd; }
         .move-btn { cursor: pointer; padding: 5px; font-size: 14px; user-select: none; color: #555; }
-        .move-btn:active { background: #ddd; }
         .layer-content { padding: 8px; flex-grow: 1; display: flex; flex-direction: column; justify-content: center;}
         .layer-header { display: flex; align-items: center; font-weight: bold; font-size: 12px; margin-bottom: 6px;}
         .layer-controls { display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
@@ -46,64 +50,103 @@
 
         .leaflet-popup-pane { z-index: 9999 !important; }
         .geo-popup { font-size: 13px; line-height: 1.4; width: 300px; }
-        .geo-popup b { color: #007AFF; }
-        .geo-popup img { max-width: 100%; margin-top: 8px; border: 1px solid #ddd; }
-        
         .brgm-iframe { width: 100%; height: 200px; border: 1px solid #ccc; border-radius: 4px; margin-top: 5px; background: #f9f9f9;}
-        #profile-canvas { margin-top: 8px; border-radius: 4px; border: 1px solid #ccc; background: #fff; }
+
+        #tool-actions { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 2000; display: none; }
+        #tool-actions .action-btn { padding: 12px 24px; font-size: 15px; border-radius: 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); text-transform: uppercase; letter-spacing: 0.5px; background: #34c759;}
+
+        /* PANNEAU DE COUPE FLOTTANT (DÉPLAÇABLE & REDIMENSIONNABLE) */
+        #profile-panel {
+            position: absolute; top: 10vh; left: 10vw; width: 80vw; height: 45vh; min-height: 250px; min-width: 320px;
+            background: rgba(255, 255, 255, 0.95); border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            z-index: 2000; display: none; flex-direction: column; backdrop-filter: blur(5px);
+            resize: both; overflow: hidden; border: 1px solid #ccc;
+        }
+        #profile-panel::after {
+            content: '◢'; position: absolute; bottom: 2px; right: 2px; font-size: 16px; color: #888; pointer-events: none; cursor: se-resize;
+        }
+        .profile-header {
+            display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; cursor: grab;
+            background: #eee; border-bottom: 1px solid #ccc; font-size: 13px; flex-wrap: wrap; gap: 10px;
+        }
+        .profile-header:active { cursor: grabbing; }
+        .profile-content {
+            flex-grow: 1; position: relative; overflow-x: auto; overflow-y: hidden; background: #fff; cursor: crosshair;
+        }
+        #profile-canvas { display: block; height: 100%; }
+        
+        #hover-line { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255,0,0,0.5); display: none; pointer-events: none; }
+        #hover-dot { position: absolute; width: 10px; height: 10px; background: red; border: 2px solid white; border-radius: 50%; transform: translate(-50%, -50%); display: none; pointer-events: none; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
     </style>
 </head>
 <body>
-
-    <!-- MASQUE SVG FIX SAFARI : Ajout des defs pour compatibilité iOS -->
-    <svg width="0" height="0" style="position:absolute; z-index:-1; pointer-events:none;">
-        <defs>
-            <filter id="water-mask" color-interpolation-filters="sRGB">
-                <feColorMatrix type="matrix" values="
-                    0 0 0 0 0.1
-                    0 0 0 0 0.5
-                    0 0 0 0 0.9
-                    -12 0 12 0 -0.5
-                "/>
-            </filter>
-        </defs>
-    </svg>
 
     <div id="search-container">
         <input type="text" id="search-input" placeholder="Lieu, sommet..." onkeypress="if(event.key === 'Enter') searchPlace()">
         <button id="search-btn" onclick="searchPlace()">🔍</button>
     </div>
 
+    <!-- BOUTONS PRÉRÉGLAGES RAPIDES -->
+    <div class="presets-container">
+        <button class="preset-btn" onclick="applyPreset('default')" title="Défaut">🌍 Défaut</button>
+        <button class="preset-btn" onclick="applyPreset('topo')" title="Topo Only">⛰️ Topo</button>
+        <button class="preset-btn" onclick="applyPreset('geol')" title="Geol Only">🪨 Géol</button>
+    </div>
+
+    <div id="tool-actions">
+        <button class="action-btn" id="btn-valider-outil" onclick="validateTool()">✅ Valider</button>
+    </div>
+
+    <!-- PANNEAU DE COUPE FLOTTANT XXL -->
+    <div id="profile-panel">
+        <div class="profile-header" id="prof-header">
+            <div id="prof-info">
+                <b>Dist: 0km</b> | <b>Dénivelé: 0m</b>
+            </div>
+            <div style="display:flex; gap:15px; align-items:center;">
+                <label style="font-weight:bold;">🔍 Zoom: <input type="range" id="prof-zoom" min="1" max="5" value="1" style="width:60px;" oninput="renderProfileGraph()"></label>
+                <label style="font-weight:bold;">📏 Trait: <input type="range" id="prof-thick" min="1" max="10" value="3" style="width:60px;" oninput="renderProfileGraph()"></label>
+                <div class="close-btn" onclick="closeProfile()" title="Fermer la coupe">✖</div>
+            </div>
+        </div>
+        <div class="profile-content" id="prof-container" onmousemove="handleProfileHover(event)" onmouseleave="hideProfileHover()" ontouchmove="handleProfileHover(event)">
+            <canvas id="profile-canvas"></canvas>
+            <div id="hover-line"></div>
+            <div id="hover-dot"></div>
+        </div>
+        <div id="prof-dirs" style="display:flex; justify-content:space-between; padding: 4px 15px; font-weight:bold; color:#555; background:#f5f5f5; font-size:12px; border-top:1px solid #ddd;">
+            <span id="dir-start">--</span>
+            <span style="font-size:10px; font-weight:normal; color:#aaa;">(Axe du tracé)</span>
+            <span id="dir-end">--</span>
+        </div>
+    </div>
+
     <div id="map"></div>
-    <div class="legend-box" id="legend">Calcul...</div>
+    <div class="legend-box" id="legend">0m<div class="color-bar" style="background: linear-gradient(to top, green, yellow, brown)"></div>0m</div>
 
     <div id="settings-panel">
-        <div class="close-btn" onclick="toggleSettings()">✖</div>
-        <h3>Réglages V19</h3>
-        
+        <div class="close-btn" style="position: absolute; top:15px;" onclick="toggleSettings()">✖</div>
+        <h3>Réglages V33</h3>
         <div class="setting-group">
             <b>Couleurs Altimétriques</b>
             <div class="setting-row"><span>Bas (Creux)</span> <input type="color" id="col-low"></div>
             <div class="setting-row"><span>Moyen (Pentes)</span> <input type="color" id="col-mid"></div>
             <div class="setting-row"><span>Haut (Pics)</span> <input type="color" id="col-high"></div>
         </div>
-        
         <div class="setting-group">
             <b>Ordre des Couches (Utilisez ⬆️⬇️)</b>
-            <p style="font-size: 10px; color: #666; margin: 2px 0 8px 0;">Le calque en haut couvre les autres. <b>Double-cliquez sur la carte</b> pour les notices.</p>
+            <p style="font-size: 10px; color: #666; margin: 2px 0 8px 0;">Le calque en haut couvre les autres.</p>
             <ul id="layers-list"></ul>
         </div>
-
         <button class="action-btn" onclick="document.getElementById('gpx-input').click()">📁 Importer Trace GPX</button>
         <input type="file" id="gpx-input" accept=".gpx" style="display:none" onchange="loadGPX(event)">
         <button class="action-btn" style="background:#34c759;" onclick="saveSettings()">💾 Sauvegarder</button>
         <button class="action-btn secondary" onclick="resetSettings()">🔄 Remettre à zéro</button>
     </div>
 
-    <!-- Nouveaux outils ajoutés ici -->
     <div class="controls-container" onmousedown="event.stopPropagation()" ondblclick="event.stopPropagation()">
-        <div class="custom-control" id="btn-ruler" onclick="toggleRuler()" title="Règle (Distance et Profil de Dénivelé)">📏</div>
-        <div class="custom-control" id="btn-pencil" onclick="togglePencil()" title="Crayon (Sélectionner une zone de relief)">✏️</div>
+        <div class="custom-control" id="btn-ruler" onclick="toggleRuler()" title="Règle (Coupe du relief détaillée)">📏</div>
+        <div class="custom-control" id="btn-pencil" onclick="togglePencil()" title="Crayon (Sélectionner zone en 2 clics)">✏️</div>
         <div class="custom-control" onclick="toggleFullScreen()" title="Plein Écran">⛶</div>
         <div class="custom-control" onclick="toggleSettings()" title="Réglages">⚙️</div>
         <div class="custom-control" id="btn-locate" onclick="locateUser()" title="Me localiser">📍</div>
@@ -111,54 +154,81 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // --- 1. CONFIGURATION STRICTE DES COUCHES ---
-        // Nouveaux réglages par défaut : Topo (75%) > Eau (100%) > Relief (80%)
+        // --- 1. CONFIGURATION DES COUCHES ---
         let layerDefs = [
             { id: 'top', name: 'Noms & Sentiers (GR)', type: 'group', op: 100, active: false },
-            { id: 'base_lines', name: 'Lignes Topo CSS (On Top)', type: 'topoblend', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', op: 75, active: true },
-            { id: 'water', name: 'Eau du Monde (SVG)', type: 'water_svg', url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png', op: 100, active: true },
-            { id: 'ele', name: 'Relief Dynamique', type: 'custom', op: 80, active: true },
+            { id: 'base_lines', name: 'Lignes Topo CSS (On Top)', type: 'topoblend', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', op: 70, active: true },
+            { id: 'water', name: 'Eau du Monde', type: 'water_canvas', url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png', op: 100, active: true },
+            { id: 'ele', name: 'Relief Dynamique', type: 'custom', op: 70, active: true },
+            { id: 'geo_w', name: 'Géologie (Monde)', type: 'xyz', url: 'https://tiles.macrostrat.org/carto/{z}/{x}/{y}.png', op: 80, active: true },
             { id: 'geo_fr', name: 'Géologie (France BRGM)', type: 'wms', url: 'https://geoservices.brgm.fr/geologie', wmsLayer: 'GEOLOGIE', op: 60, active: false },
-            { id: 'geo_w', name: 'Géologie (Monde)', type: 'xyz', url: 'https://tiles.macrostrat.org/carto/{z}/{x}/{y}.png', op: 60, active: false },
             { id: 'base_full', name: 'Complete Open Topo (Fond)', type: 'xyz', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', op: 100, active: false }
         ];
 
         let layersObj = {};
         let colors = { low: [60,176,67], mid: [255,235,59], high: [139,69,19] };
 
-        const map = L.map('map', { zoomControl: false, doubleClickZoom: false }).setView([45.92, 6.86], 10);
+        const map = L.map('map', { zoomControl: false, doubleClickZoom: true }).setView([45.92, 6.86], 10);
         L.control.zoom({ position: 'bottomleft' }).addTo(map);
         L.control.scale({ position: 'bottomleft', imperial: false }).addTo(map);
 
         window.addEventListener('resize', () => map.invalidateSize());
 
+        // --- CACHE DE TUILES SÉCURISÉ (TIMEOUT INCLUS POUR NE JAMAIS BLOQUER) ---
+        const globalTileCache = {};
+        function fetchRawTileData(url) {
+            if(globalTileCache[url]) return globalTileCache[url];
+            let promise = new Promise((resolve) => {
+                let img = new Image(); img.crossOrigin = "Anonymous";
+                let tOut = setTimeout(() => { img.src = ""; resolve(null); }, 4000); // 4s timeout max
+                img.onload = () => {
+                    clearTimeout(tOut);
+                    try {
+                        let canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 256;
+                        let ctx = canvas.getContext('2d', {willReadFrequently: true}); 
+                        ctx.drawImage(img, 0, 0, 256, 256); // Force Resize 256 pour alignement
+                        resolve(ctx.getImageData(0,0,256,256));
+                    } catch(e) { resolve(null); }
+                };
+                img.onerror = () => { clearTimeout(tOut); resolve(null); }; 
+                img.src = url;
+            });
+            globalTileCache[url] = promise; return promise;
+        }
+
+        async function getElevationAt(lat, lng) {
+            let z = 11; let pt = map.project([lat, lng], z).floor();
+            let tileX = Math.floor(pt.x / 256), tileY = Math.floor(pt.y / 256);
+            let imgData = await fetchRawTileData(`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${tileX}/${tileY}.png`);
+            if(!imgData) return null;
+            let xInside = pt.x % 256; if(xInside < 0) xInside += 256; let yInside = pt.y % 256; if(yInside < 0) yInside += 256;
+            let i = (yInside * 256 + xInside) * 4; let d = imgData.data;
+            return (d[i]*256 + d[i+1] + d[i+2]/256) - 32768;
+        }
+
         // --- 2. MOTEUR D'ALTITUDE DYNAMIQUE ---
         L.DynamicElevationLayer = L.GridLayer.extend({
             createTile: function (coords, done) {
-                var tile = L.DomUtil.create('canvas', 'leaflet-tile');
-                tile.width = 256; tile.height = 256; 
-                var ctx = tile.getContext('2d', { willReadFrequently: true });
-                var img = new Image(); img.crossOrigin = "Anonymous";
-                img.src = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${coords.z}/${coords.x}/${coords.y}.png`;
-                img.onload = () => {
-                    ctx.drawImage(img, 0, 0); var data = ctx.getImageData(0,0,256,256).data;
-                    var elevations = new Float32Array(256 * 256);
-                    for (var i = 0; i < data.length; i += 4) elevations[i/4] = (data[i]*256 + data[i+1] + data[i+2]/256) - 32768;
-                    tile.elevations = elevations; this._drawTile(tile); done(null, tile);
-                };
-                img.onerror = () => done(null, tile); return tile;
+                var tile = L.DomUtil.create('canvas', 'leaflet-tile'); tile.width = 256; tile.height = 256; 
+                fetchRawTileData(`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${coords.z}/${coords.x}/${coords.y}.png`).then(imgData => {
+                    try {
+                        if(imgData) {
+                            var data = imgData.data; var elevations = new Float32Array(65536);
+                            for (var i = 0; i < data.length; i += 4) { elevations[i>>2] = (data[i]*256 + data[i+1] + data[i+2]/256) - 32768; }
+                            tile.elevations = elevations; this._drawTile(tile); this._queueUpdate(); 
+                        }
+                    } catch(e) {}
+                    done(null, tile);
+                }).catch(() => done(null, tile));
+                return tile;
             },
             onAdd: function(map) { L.GridLayer.prototype.onAdd.call(this, map); map.on('moveend', this._updateMinMax, this); },
             onRemove: function(map) { map.off('moveend', this._updateMinMax, this); L.GridLayer.prototype.onRemove.call(this, map); },
             _currentMin: 0, _currentMax: 1000, _lockedMin: null, _lockedMax: null,
-            
+            _queueUpdate: function() { if(this._updateTimeout) clearTimeout(this._updateTimeout); this._updateTimeout = setTimeout(() => { this._updateMinMax(); }, 50); },
             _updateMinMax: function() {
                 let min = Infinity; let max = -Infinity; let hasData = false;
-                
-                // Si l'utilisateur a utilisé le crayon, on se limite à sa zone
-                if (this._lockedMin !== null && this._lockedMax !== null) {
-                    min = this._lockedMin; max = this._lockedMax; hasData = true;
-                } else {
+                if (this._lockedMin !== null && this._lockedMax !== null) { min = this._lockedMin; max = this._lockedMax; hasData = true; } else {
                     for (let key in this._tiles) {
                         if (this._tiles[key].el.elevations) {
                             hasData = true;
@@ -169,81 +239,66 @@
                         }
                     }
                 }
-                
                 if (hasData) {
-                    if (max - min < 10) max = min + 10;
-                    this._currentMin = min; this._currentMax = max;
+                    if (max - min < 10) max = min + 10; this._currentMin = min; this._currentMax = max;
                     for (let key in this._tiles) if (this._tiles[key].el.elevations) this._drawTile(this._tiles[key].el);
                     updateLegend(min, max);
                 }
             },
-            
             _drawTile: function(tile) {
                 let ctx = tile.getContext('2d'); let imgData = ctx.createImageData(256, 256); let data = imgData.data;
-                let min = this._currentMin; let max = this._currentMax;
-                let cL = colors.low, cM = colors.mid, cH = colors.high;
-
+                let min = this._currentMin; let max = this._currentMax; let cL = colors.low, cM = colors.mid, cH = colors.high;
                 for (let i = 0; i < tile.elevations.length; i++) {
-                    let el = tile.elevations[i];
-                    let t = (el - min) / (max - min); 
-                    if (t < 0) t = 0; if (t > 1) t = 1;
-
+                    let el = tile.elevations[i]; let t = (max - min) === 0 ? 0 : (el - min) / (max - min); if (t < 0) t = 0; if (t > 1) t = 1;
                     let r, g, b;
-                    if (t < 0.5) { 
-                        let lt = t * 2; r = cL[0] + (cM[0] - cL[0]) * lt; g = cL[1] + (cM[1] - cL[1]) * lt; b = cL[2] + (cM[2] - cL[2]) * lt; 
-                    } else { 
-                        let lt = (t - 0.5) * 2; r = cM[0] + (cH[0] - cM[0]) * lt; g = cM[1] + (cH[1] - cM[1]) * lt; b = cM[2] + (cH[2] - cM[2]) * lt; 
-                    }
-
-                    if (min > 2000) {
-                        let frost = Math.min((min - 2000) / 6000, 0.25); 
-                        r += (255 - r) * frost; g += (255 - g) * frost; b += (255 - b) * frost;
-                    }
-
+                    if (t < 0.5) { let lt = t * 2; r = cL[0] + (cM[0] - cL[0]) * lt; g = cL[1] + (cM[1] - cL[1]) * lt; b = cL[2] + (cM[2] - cL[2]) * lt; 
+                    } else { let lt = (t - 0.5) * 2; r = cM[0] + (cH[0] - cM[0]) * lt; g = cM[1] + (cH[1] - cM[1]) * lt; b = cM[2] + (cH[2] - cM[2]) * lt; }
+                    if (min > 2000) { let frost = Math.min((min - 2000) / 6000, 0.25); r += (255 - r) * frost; g += (255 - g) * frost; b += (255 - b) * frost; }
                     let brightness = 0.5 + (t * 0.7); 
-                    data[i*4] = Math.min(255, r * brightness); 
-                    data[i*4+1] = Math.min(255, g * brightness); 
-                    data[i*4+2] = Math.min(255, b * brightness); 
-                    data[i*4+3] = 255;
+                    data[i*4] = Math.min(255, r * brightness); data[i*4+1] = Math.min(255, g * brightness); data[i*4+2] = Math.min(255, b * brightness); data[i*4+3] = 255;
                 }
                 ctx.putImageData(imgData, 0, 0);
             }
         });
 
-        // --- 3. GESTION DES Z-INDEX ET DES FILTRES INFAILLIBLES ---
+        // --- 3. MOTEUR POUR L'EAU ---
+        L.WaterCanvasLayer = L.GridLayer.extend({
+            createTile: function (coords, done) {
+                var tile = L.DomUtil.create('canvas', 'leaflet-tile'); tile.width = 256; tile.height = 256;
+                var ctx = tile.getContext('2d', { willReadFrequently: true });
+                let s = ['a', 'b', 'c', 'd'][Math.floor(Math.random() * 4)];
+                fetchRawTileData(`https://${s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/${coords.z}/${coords.x}/${coords.y}.png`).then(imgData => {
+                    try {
+                        if(imgData) {
+                            var data = imgData.data;
+                            for (var i = 0; i < data.length; i += 4) {
+                                if (data[i+2] > data[i] + 10 && data[i+2] > data[i+1]) { data[i] = 0; data[i+1] = 100; data[i+2] = 200; data[i+3] = 150; 
+                                } else { data[i+3] = 0; }
+                            }
+                            ctx.putImageData(imgData, 0, 0);
+                        }
+                    } catch(e) {}
+                    done(null, tile);
+                }).catch(() => done(null, tile));
+                return tile;
+            }
+        });
+
         function initLayers() {
             layerDefs.forEach((def, index) => {
                 if(!map.getPane(`pane_${def.id}`)) {
                     map.createPane(`pane_${def.id}`);
-                    
-                    if(def.type === 'topoblend') {
-                        map.getPane(`pane_${def.id}`).style.filter = "grayscale(100%) brightness(105%) contrast(150%)";
-                        map.getPane(`pane_${def.id}`).style.mixBlendMode = "multiply";
-                    }
-                    
-                    if(def.type === 'water_svg') {
-                        map.getPane(`pane_${def.id}`).style.filter = "url(#water-mask)";
-                        // Fix Safari iOS
-                        map.getPane(`pane_${def.id}`).style.setProperty('-webkit-filter', 'url(#water-mask)');
-                    }
+                    if(def.type === 'topoblend') { map.getPane(`pane_${def.id}`).style.filter = "grayscale(100%) brightness(105%) contrast(150%)"; map.getPane(`pane_${def.id}`).style.mixBlendMode = "multiply"; }
                 }
-                
                 if(!layersObj[def.id]) {
                     let l;
-                    if(def.type === 'xyz' || def.type === 'topoblend' || def.type === 'water_svg') {
-                        l = L.tileLayer(def.url, { maxZoom: 18, pane: `pane_${def.id}` });
-                    }
-                    else if(def.type === 'wms') l = L.tileLayer.wms(def.url, { layers: def.wmsLayer, format: 'image/png', transparent: true, pane: `pane_${def.id}` });
-                    else if(def.type === 'group') {
-                        l = L.layerGroup([
-                            L.tileLayer('https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png', { maxZoom: 18, pane: `pane_${def.id}` }),
-                            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', { maxZoom: 20, pane: `pane_${def.id}` })
-                        ]);
-                    } 
+                    if(def.type === 'xyz' || def.type === 'topoblend') { l = L.tileLayer(def.url, { maxZoom: 18, pane: `pane_${def.id}`, crossOrigin: true }); }
+                    else if(def.type === 'water_canvas') { l = new L.WaterCanvasLayer({ pane: `pane_${def.id}`, maxZoom: 18, crossOrigin: true }); }
+                    else if(def.type === 'wms') l = L.tileLayer.wms(def.url, { layers: def.wmsLayer, format: 'image/png', transparent: true, pane: `pane_${def.id}`, crossOrigin: true });
+                    else if(def.type === 'group') { l = L.layerGroup([ L.tileLayer('https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png', { maxZoom: 18, pane: `pane_${def.id}` }), L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', { maxZoom: 20, pane: `pane_${def.id}` }) ]); } 
                     else if(def.type === 'custom') l = new L.DynamicElevationLayer({ pane: `pane_${def.id}` });
                     layersObj[def.id] = l;
                 }
-                
                 if(def.active && !map.hasLayer(layersObj[def.id])) layersObj[def.id].addTo(map);
                 else if(!def.active && map.hasLayer(layersObj[def.id])) map.removeLayer(layersObj[def.id]);
                 setLayerOpacity(def.id, def.op);
@@ -253,12 +308,32 @@
 
         function updateZIndexes() { let z = 400; layerDefs.forEach(def => { map.getPane(`pane_${def.id}`).style.zIndex = z; z -= 10; }); }
 
-        function moveLayer(index, direction) {
-            if (direction === -1 && index > 0) { 
-                let temp = layerDefs[index]; layerDefs[index] = layerDefs[index - 1]; layerDefs[index - 1] = temp;
-            } else if (direction === 1 && index < layerDefs.length - 1) {
-                let temp = layerDefs[index]; layerDefs[index] = layerDefs[index + 1]; layerDefs[index + 1] = temp;
+        function updateLayerConfig(id, active, op) {
+            let def = layerDefs.find(d => d.id === id);
+            if(def) { def.active = active; def.op = op;
+                if(active && !map.hasLayer(layersObj[id])) layersObj[id].addTo(map); else if(!active && map.hasLayer(layersObj[id])) map.removeLayer(layersObj[id]);
+                setLayerOpacity(id, op);
             }
+        }
+
+        // --- PRÉRÉGLAGES ---
+        function applyPreset(type) {
+            if (type === 'default') {
+                updateLayerConfig('top', false, 100); updateLayerConfig('base_lines', true, 70); updateLayerConfig('water', true, 100);
+                updateLayerConfig('ele', true, 70); updateLayerConfig('geo_w', true, 80); updateLayerConfig('geo_fr', false, 60); updateLayerConfig('base_full', false, 100);
+            } else if (type === 'topo') {
+                updateLayerConfig('top', false, 100); updateLayerConfig('base_lines', true, 70); updateLayerConfig('water', true, 100);
+                updateLayerConfig('ele', true, 90); updateLayerConfig('geo_w', false, 80); updateLayerConfig('geo_fr', false, 60); updateLayerConfig('base_full', false, 100);
+            } else if (type === 'geol') {
+                updateLayerConfig('top', false, 100); updateLayerConfig('base_lines', true, 70); updateLayerConfig('water', true, 100);
+                updateLayerConfig('ele', false, 70); updateLayerConfig('geo_w', true, 90); updateLayerConfig('geo_fr', true, 90); updateLayerConfig('base_full', false, 100);
+            }
+            renderLayerList();
+        }
+
+        function moveLayer(index, direction) {
+            if (direction === -1 && index > 0) { let temp = layerDefs[index]; layerDefs[index] = layerDefs[index - 1]; layerDefs[index - 1] = temp;
+            } else if (direction === 1 && index < layerDefs.length - 1) { let temp = layerDefs[index]; layerDefs[index] = layerDefs[index + 1]; layerDefs[index + 1] = temp; }
             updateZIndexes(); renderLayerList();
         }
 
@@ -269,10 +344,8 @@
                 const moveBox = document.createElement('div'); moveBox.className = 'move-box';
                 moveBox.innerHTML = `<div class="move-btn" onclick="moveLayer(${index}, -1)">⬆️</div><div class="move-btn" onclick="moveLayer(${index}, 1)">⬇️</div>`;
                 const contentBox = document.createElement('div'); contentBox.className = 'layer-content';
-                contentBox.innerHTML = `
-                    <div class="layer-header"><label><input type="checkbox" onchange="toggleLayer('${def.id}', this.checked)" ${def.active ? 'checked' : ''}> ${def.name}</label></div>
-                    <div class="layer-controls"><span>Opacité:</span><input type="range" min="0" max="100" value="${def.op}" oninput="setLayerOpacity('${def.id}', this.value)"></div>
-                `;
+                contentBox.innerHTML = `<div class="layer-header"><label><input type="checkbox" onchange="toggleLayer('${def.id}', this.checked)" ${def.active ? 'checked' : ''}> ${def.name}</label></div>
+                    <div class="layer-controls"><span>Opacité:</span><input type="range" min="0" max="100" value="${def.op}" oninput="setLayerOpacity('${def.id}', this.value)"></div>`;
                 li.appendChild(moveBox); li.appendChild(contentBox); list.appendChild(li);
             });
         }
@@ -280,88 +353,54 @@
         function toggleLayer(id, active) { layerDefs.find(d => d.id === id).active = active; if(active) layersObj[id].addTo(map); else map.removeLayer(layersObj[id]); }
         function setLayerOpacity(id, op) { layerDefs.find(d => d.id === id).op = op; const l = layersObj[id]; if(l.setOpacity) l.setOpacity(op / 100); else if(l.eachLayer) l.eachLayer(subL => subL.setOpacity(op / 100)); }
 
-        // --- 4. GESTION DES OUTILS : CRAYON & RÈGLE ---
-        let pencilActive = false, drawStart = null, drawRect = null;
-        let rulerActive = false, rulerPts = [], rulerLine = null, rulerMarkers = [];
+        // --- 4. GESTION DES OUTILS : CRAYON (2 Clics) & RÈGLE ---
+        let activeTool = null;
+        let pencilPts = [], pencilMarkers = [], drawRect = null;
+        let rulerPts = [], rulerLine = null, rulerMarkers = [];
+
+        function setActionBar(text) {
+            let bar = document.getElementById('tool-actions'); let btn = document.getElementById('btn-valider-outil');
+            if (text) { bar.style.display = 'block'; btn.innerHTML = text; } else { bar.style.display = 'none'; }
+        }
+
+        function clearPencil() {
+            pencilPts = []; pencilMarkers.forEach(m => map.removeLayer(m)); pencilMarkers = [];
+            if(drawRect) { map.removeLayer(drawRect); drawRect = null; }
+        }
 
         function togglePencil() {
-            pencilActive = !pencilActive;
-            document.getElementById('btn-pencil').style.background = pencilActive ? '#ddd' : 'white';
-            if (pencilActive && rulerActive) toggleRuler(); // Ferme l'outil Règle si ouvert
-            
-            if (!pencilActive) {
-                if (drawRect) { map.removeLayer(drawRect); drawRect = null; }
-                let eleL = layersObj['ele'];
-                if(eleL) { eleL._lockedMin = null; eleL._lockedMax = null; eleL._updateMinMax(); }
+            if(activeTool === 'pencil') {
+                activeTool = null; document.getElementById('btn-pencil').style.background = 'white';
+                clearPencil(); setActionBar(null);
+            } else {
+                if(activeTool === 'ruler') toggleRuler();
+                activeTool = 'pencil'; document.getElementById('btn-pencil').style.background = '#ddd';
+                clearPencil(); setActionBar(null);
             }
-            map._container.style.cursor = pencilActive ? 'crosshair' : '';
-            if(pencilActive) map.dragging.disable(); else map.dragging.enable();
+            map._container.style.cursor = activeTool === 'pencil' ? 'crosshair' : '';
+        }
+
+        window.resetElevationScale = function() {
+            let eleL = layersObj['ele'];
+            if(eleL) { eleL._lockedMin = null; eleL._lockedMax = null; eleL._updateMinMax(); }
         }
 
         function toggleRuler() {
-            rulerActive = !rulerActive;
-            document.getElementById('btn-ruler').style.background = rulerActive ? '#ddd' : 'white';
-            if (rulerActive && pencilActive) togglePencil(); // Ferme l'outil Crayon si ouvert
-            
-            if (!rulerActive) {
-                if(rulerLine) map.removeLayer(rulerLine);
-                rulerMarkers.forEach(m => map.removeLayer(m));
-                rulerPts = []; rulerLine = null; rulerMarkers = [];
+            if(activeTool === 'ruler') {
+                activeTool = null; document.getElementById('btn-ruler').style.background = 'white';
+                if(rulerLine && document.getElementById('profile-panel').style.display !== 'flex') { map.removeLayer(rulerLine); rulerLine = null; }
+                rulerMarkers.forEach(m => map.removeLayer(m)); rulerPts = []; rulerMarkers = []; setActionBar(null);
+            } else {
+                if(activeTool === 'pencil') togglePencil();
+                closeProfile(); 
+                activeTool = 'ruler'; document.getElementById('btn-ruler').style.background = '#ddd';
+                setActionBar('✅ Valider le tracé');
             }
-            map._container.style.cursor = rulerActive ? 'crosshair' : '';
+            map._container.style.cursor = activeTool === 'ruler' ? 'crosshair' : '';
         }
 
-        map.on('mousedown', function(e) {
-            if(pencilActive) {
-                drawStart = e.latlng;
-                if(drawRect) map.removeLayer(drawRect);
-                drawRect = L.rectangle([drawStart, drawStart], {color: "#ff7800", weight: 2, fillOpacity: 0.2, pane:'pane_top'}).addTo(map);
-            }
-        });
-
-        map.on('mousemove', function(e) {
-            if(pencilActive && drawStart && drawRect) { drawRect.setBounds([drawStart, e.latlng]); }
-        });
-
-        map.on('mouseup', function(e) {
-            if(pencilActive && drawStart && drawRect) {
-                let bounds = drawRect.getBounds();
-                drawStart = null; pencilActive = false;
-                document.getElementById('btn-pencil').style.background = 'white';
-                map.dragging.enable(); map._container.style.cursor = '';
-                
-                let min = Infinity, max = -Infinity;
-                let eleL = layersObj['ele'];
-                if(eleL) {
-                    for (let key in eleL._tiles) {
-                        let tile = eleL._tiles[key];
-                        if (!tile.el.elevations) continue;
-                        let coords = tile.coords;
-                        let nwPoint = coords.scaleBy(new L.Point(256, 256));
-                        for (let i = 0; i < tile.el.elevations.length; i += 16) {
-                            let el = tile.el.elevations[i];
-                            if (el > -500 && el < 8850) {
-                                let x = i % 256; let y = Math.floor(i / 256);
-                                let latlng = map.unproject(nwPoint.add(new L.Point(x, y)), coords.z);
-                                if (bounds.contains(latlng)) {
-                                    if (el < min) min = el; if (el > max) max = el;
-                                }
-                            }
-                        }
-                    }
-                    if (min < Infinity && max > -Infinity) {
-                        if (max - min < 10) max = min + 10;
-                        eleL._lockedMin = min; eleL._lockedMax = max;
-                        eleL._updateMinMax();
-                    } else {
-                        map.removeLayer(drawRect); drawRect = null; alert("Aucune donnée d'altitude dans cette zone.");
-                    }
-                }
-            }
-        });
-
         map.on('click', function(e) {
-            if(rulerActive) {
+            if(activeTool === 'ruler') {
                 rulerPts.push(e.latlng);
                 let m = L.circleMarker(e.latlng, {radius: 4, color: '#007AFF', fillColor: 'white', fillOpacity: 1, pane:'pane_top'}).addTo(map);
                 rulerMarkers.push(m);
@@ -370,200 +409,397 @@
                     rulerLine = L.polyline(rulerPts, {color: '#007AFF', weight: 4, pane:'pane_top'}).addTo(map);
                 }
             }
+            else if (activeTool === 'pencil') {
+                if (pencilPts.length === 2) clearPencil();
+                pencilPts.push(e.latlng);
+                let m = L.circleMarker(e.latlng, {radius: 5, color: '#ff7800', fillColor: 'white', fillOpacity: 1, pane:'pane_top'}).addTo(map);
+                pencilMarkers.push(m);
+                
+                if (pencilPts.length === 2) {
+                    drawRect = L.rectangle([pencilPts[0], pencilPts[1]], {color: "#ff7800", weight: 2, fillOpacity: 0.2, pane:'pane_top'}).addTo(map);
+                    setActionBar('✅ Valider la zone');
+                } else { setActionBar(null); }
+            }
         });
 
-        async function finishRuler() {
-            let dist = 0;
-            for(let i=0; i<rulerPts.length-1; i++) { dist += rulerPts[i].distanceTo(rulerPts[i+1]); }
-            let distStr = dist > 1000 ? (dist/1000).toFixed(2) + " km" : Math.round(dist) + " m";
-            
-            let popup = L.popup().setLatLng(rulerPts[rulerPts.length-1])
-                .setContent(`<b>Distance : ${distStr}</b><br><i style="font-size:10px">Calcul du profil en cours...</i>`).openOn(map);
-                
-            // Echantillonage pour profil altimétrique
-            let samples = [rulerPts[0]];
-            let totalPoints = 50; let step = dist / totalPoints;
-            let currentDist = 0; let pIdx = 0;
-            let segDist = rulerPts[0].distanceTo(rulerPts[1]);
-            
-            for(let i=1; i<=totalPoints; i++) {
-                let target = i * step;
-                while(target > currentDist + segDist && pIdx < rulerPts.length - 2) {
-                    currentDist += segDist; pIdx++;
-                    segDist = rulerPts[pIdx].distanceTo(rulerPts[pIdx+1]);
-                }
-                let ratio = segDist > 0 ? (target - currentDist) / segDist : 0;
-                if (ratio > 1) ratio = 1;
-                let lat = rulerPts[pIdx].lat + (rulerPts[pIdx+1].lat - rulerPts[pIdx].lat) * ratio;
-                let lng = rulerPts[pIdx].lng + (rulerPts[pIdx+1].lng - rulerPts[pIdx].lng) * ratio;
-                samples.push(L.latLng(lat, lng));
-            }
-            
-            let locs = samples.map(p => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|');
-            try {
-                let res = await fetch(`https://api.opentopodata.org/v1/srtm90m?locations=${locs}`);
-                let data = await res.json();
-                let elevations = data.results.map(r => r.elevation);
-                
-                let w = 260, h = 100;
-                let minE = Math.min(...elevations); let maxE = Math.max(...elevations);
-                let range = maxE - minE; if(range === 0) range = 1;
-                
-                let canvas = document.createElement('canvas');
-                canvas.id = 'profile-canvas'; canvas.width = w; canvas.height = h;
-                let ctx = canvas.getContext('2d');
-                
-                ctx.beginPath(); ctx.moveTo(0, h);
-                for(let i=0; i<elevations.length; i++) {
-                    let x = (i / (elevations.length-1)) * w;
-                    let y = h - ((elevations[i] - minE) / range) * (h - 20) - 10;
-                    ctx.lineTo(x, y);
-                }
-                ctx.lineTo(w, h);
-                ctx.fillStyle = 'rgba(0, 122, 255, 0.3)'; ctx.fill();
-                ctx.strokeStyle = '#007AFF'; ctx.stroke();
-                
-                ctx.fillStyle = 'black'; ctx.font = '10px Arial';
-                ctx.fillText(Math.round(maxE)+'m', 5, 15);
-                ctx.fillText(Math.round(minE)+'m', 5, h - 5);
-                
-                let container = document.createElement('div');
-                container.innerHTML = `<b>Distance : ${distStr}</b><br><div style="font-size:11px; color:#555;">Dénivelé: Min ${Math.round(minE)}m / Max ${Math.round(maxE)}m</div>`;
-                container.appendChild(canvas);
-                popup.setContent(container);
-            } catch(err) {
-                popup.setContent(`<b>Distance : ${distStr}</b><br><i style="font-size:10px; color:red;">Erreur génération du profil.</i>`);
-            }
-            
-            rulerActive = false; document.getElementById('btn-ruler').style.background = 'white'; map._container.style.cursor = '';
+        function validateTool() {
+            if (activeTool === 'pencil') finishPencil();
+            else if (activeTool === 'ruler') finishRuler();
         }
 
-        // --- 5. DOUBLE-CLIC : POPUP BRGM IFRAME ---
-        map.on('dblclick', async function(e) {
-            if (rulerActive && rulerPts.length > 1) { finishRuler(); return; }
-            if (pencilActive) return;
+        async function finishPencil() {
+            if(pencilPts.length !== 2) return;
+            setActionBar('⏳ Calcul de zone...');
+            
+            let bounds = L.latLngBounds(pencilPts[0], pencilPts[1]);
+            let stepLat = (bounds.getNorth() - bounds.getSouth()) / 20;
+            let stepLng = (bounds.getEast() - bounds.getWest()) / 20;
+            let promises = [];
+            for(let lat = bounds.getSouth(); lat <= bounds.getNorth(); lat += stepLat) {
+                for(let lng = bounds.getWest(); lng <= bounds.getEast(); lng += stepLng) {
+                    promises.push(getElevationAt(lat, lng));
+                }
+            }
+            
+            let elevations = await Promise.all(promises);
+            let min = Infinity, max = -Infinity;
+            elevations.forEach(el => {
+                if(el !== null && el > -500 && el < 8850) { if(el < min) min = el; if(el > max) max = el; }
+            });
 
-            const geoWorldActive = layerDefs.find(l => l.id === 'geo_w' && l.active);
-            const geoFrActive = layerDefs.find(l => l.id === 'geo_fr' && l.active);
+            if (min < Infinity && max > -Infinity) {
+                if (max - min < 10) max = min + 10;
+                let eleL = layersObj['ele'];
+                if(eleL) { eleL._lockedMin = min; eleL._lockedMax = max; eleL._updateMinMax(); }
+            } else { alert("Aucune donnée d'altitude trouvée dans cette zone."); }
+            
+            // On valide mais on laisse l'outil ouvert et la mémoire du Crayon active
+            activeTool = null; document.getElementById('btn-pencil').style.background = 'white';
+            clearPencil(); setActionBar(null); map._container.style.cursor = '';
+        }
 
-            let popupHtml = `<div class="geo-popup">`;
+        // --- MOTEUR DE COULEUR (INTERPOLATION MERCATOR & FILTRE ANTI-BRUIT) ---
+        function getColorObjForElevation(el) {
+            let eleL = layersObj['ele']; if(!eleL) return {r:0, g:122, b:255};
+            let min = eleL._currentMin; let max = eleL._currentMax;
+            let t = (max - min) === 0 ? 0 : (el - min) / (max - min); if (t < 0) t = 0; if (t > 1) t = 1;
+            let r, g, b; let cL = colors.low, cM = colors.mid, cH = colors.high;
+            if (t < 0.5) { let lt = t * 2; r = cL[0] + (cM[0] - cL[0]) * lt; g = cL[1] + (cM[1] - cL[1]) * lt; b = cL[2] + (cM[2] - cL[2]) * lt; 
+            } else { let lt = (t - 0.5) * 2; r = cM[0] + (cH[0] - cM[0]) * lt; g = cM[1] + (cH[1] - cM[1]) * lt; b = cM[2] + (cH[2] - cM[2]) * lt; }
+            if (min > 2000) { let frost = Math.min((min - 2000) / 6000, 0.25); r += (255 - r) * frost; g += (255 - g) * frost; b += (255 - b) * frost; }
+            return { r: Math.floor(r), g: Math.floor(g), b: Math.floor(b) };
+        }
 
-            if (geoWorldActive) {
-                try {
-                    const res = await fetch(`https://macrostrat.org/api/v2/geologic_units/map?lat=${e.latlng.lat}&lng=${e.latlng.lng}`);
-                    const data = await res.json();
-                    if(data.success && data.success.data.length > 0) {
-                        const unit = data.success.data[0];
-                        popupHtml += `<b>🌍 Géo Monde :</b><br><b>Ère :</b> ${unit.b_age} à ${unit.t_age} Ma<br><b>Roche :</b> ${unit.lith || 'Inconnu'}<br><br>`;
+        async function getLayerPixel(layerDef, lat, lng, currentZoom) {
+            if (layerDef.id === 'ele') {
+                let el = await getElevationAt(lat, lng);
+                if (el !== null) { let c = getColorObjForElevation(el); return { r: c.r, g: c.g, b: c.b, a: layerDef.op / 100 }; }
+                return null;
+            }
+            
+            if (layerDef.id === 'water') {
+                let targetZ = Math.min(currentZoom, 14); let pt = map.project([lat, lng], targetZ);
+                let tileX = Math.floor(pt.x / 256), tileY = Math.floor(pt.y / 256);
+                let url = `https://a.basemaps.cartocdn.com/rastertiles/voyager_nolabels/${targetZ}/${tileX}/${tileY}.png`;
+                let imgData = await fetchRawTileData(url);
+                if(imgData) {
+                    let xInside = Math.floor(pt.x % 256); if(xInside < 0) xInside += 256; let yInside = Math.floor(pt.y % 256); if(yInside < 0) yInside += 256;
+                    let i = (yInside * 256 + xInside) * 4; let d = imgData.data;
+                    if(d[i+2] > d[i] + 10 && d[i+2] > d[i+1]) return { r: 0, g: 100, b: 200, a: 0.8 * (layerDef.op / 100) }; 
+                }
+                return null;
+            }
+            
+            let layer = layersObj[layerDef.id]; if(!layer) return null;
+            
+            let targetZ = currentZoom;
+            if(layerDef.id === 'geo_w' && targetZ > 12) targetZ = 12; 
+            if(layerDef.id === 'geo_fr' && targetZ > 15) targetZ = 15;
+            if(layerDef.id === 'base_full' && targetZ > 17) targetZ = 17;
+            
+            // Calcul point exact Mercator pour éviter le décalage Macrostrat
+            let pt = map.project([lat, lng], targetZ);
+            let tileX = Math.floor(pt.x / 256), tileY = Math.floor(pt.y / 256);
+            let coords = L.point(tileX, tileY); coords.z = targetZ;
+            let url = typeof layer.getTileUrl === 'function' ? layer.getTileUrl(coords) : null;
+            if(!url) return null;
+            
+            let imgData = await fetchRawTileData(url);
+            if(imgData) {
+                let xInside = Math.floor(pt.x % 256); if(xInside < 0) xInside += 256; let yInside = Math.floor(pt.y % 256); if(yInside < 0) yInside += 256;
+                let d = imgData.data;
+                
+                // Moteur Anti-Bruit (Ignore les lignes noires et écritures)
+                let r_sum = 0, g_sum = 0, b_sum = 0, count = 0;
+                for(let dy = -2; dy <= 2; dy++){
+                    for(let dx = -2; dx <= 2; dx++){
+                        let px = xInside + dx; let py = yInside + dy;
+                        if(px >= 0 && px < 256 && py >= 0 && py < 256){
+                            let idx = (py * 256 + px) * 4;
+                            if(d[idx+3] > 10) { 
+                                // Ignore les gris/noirs (< 85) typiques des failles BRGM
+                                let isDark = d[idx] < 85 && d[idx+1] < 85 && d[idx+2] < 85;
+                                if (!isDark) { r_sum += d[idx]; g_sum += d[idx+1]; b_sum += d[idx+2]; count++; }
+                            }
+                        }
                     }
-                } catch(err) {}
+                }
+                if(count > 0) return { r: r_sum/count, g: g_sum/count, b: b_sum/count, a: layerDef.op / 100 };
+                
+                // Secours 
+                let i = (yInside * 256 + xInside) * 4;
+                if(d[i+3] > 0) return { r: d[i], g: d[i+1], b: d[i+2], a: (d[i+3]/255) * (layerDef.op / 100) };
+            }
+            return null;
+        }
+
+        async function getDisplayedColor(lat, lng, zoom) {
+            let r = 255, g = 255, b = 255; let matched = false;
+            // Exclusion des lignes topo pour ne pas salir la courbe
+            for (let i = layerDefs.length - 1; i >= 0; i--) {
+                let def = layerDefs[i];
+                if (!def.active || def.id === 'top' || def.id === 'base_lines') continue;
+                
+                let c = await getLayerPixel(def, lat, lng, zoom);
+                if (c) {
+                    r = (c.r * c.a) + (r * (1 - c.a)); g = (c.g * c.a) + (g * (1 - c.a)); b = (c.b * c.a) + (b * (1 - c.a)); matched = true;
+                }
+            }
+            return matched ? `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})` : '#007AFF';
+        }
+
+        // Boussole globale Point A ➔ Point B
+        function calculateOverallBearing(lat1, lng1, lat2, lng2) {
+            let dLon = (lng2 - lng1) * Math.PI / 180;
+            let y = Math.sin(dLon) * Math.cos(lat2 * Math.PI / 180);
+            let x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180) - Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dLon);
+            let brng = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+            let dirs = ['Nord', 'Nord-Est', 'Est', 'Sud-Est', 'Sud', 'Sud-Ouest', 'Ouest', 'Nord-Ouest'];
+            let endIdx = Math.round(brng / 45) % 8; let startIdx = (endIdx + 4) % 8; 
+            return { start: dirs[startIdx], end: dirs[endIdx] };
+        }
+
+        // --- RÈGLE : PANNEAU FLOTTANT & INTERACTIVITÉ ---
+        window.currentProfile = null;
+        let profileHoverMarker = null;
+
+        // Déplacement du panneau à la souris/tactile
+        let panel = document.getElementById('profile-panel');
+        let header = document.getElementById('prof-header');
+        let isDraggingPanel = false, dragStartX = 0, dragStartY = 0;
+
+        header.addEventListener('mousedown', function(e) {
+            if(e.target.tagName.toLowerCase() === 'input' || e.target.classList.contains('close-btn')) return;
+            isDraggingPanel = true; dragStartX = e.clientX - panel.offsetLeft; dragStartY = e.clientY - panel.offsetTop;
+            document.addEventListener('mousemove', onPanelDrag); document.addEventListener('mouseup', stopPanelDrag);
+        });
+        header.addEventListener('touchstart', function(e) {
+            if(e.target.tagName.toLowerCase() === 'input' || e.target.classList.contains('close-btn')) return;
+            isDraggingPanel = true; dragStartX = e.touches[0].clientX - panel.offsetLeft; dragStartY = e.touches[0].clientY - panel.offsetTop;
+            document.addEventListener('touchmove', onPanelTouchDrag, {passive: false}); document.addEventListener('touchend', stopPanelDrag);
+        });
+
+        function onPanelDrag(e) { if(!isDraggingPanel) return; panel.style.left = (e.clientX - dragStartX) + 'px'; panel.style.top = (e.clientY - dragStartY) + 'px'; }
+        function onPanelTouchDrag(e) { if(!isDraggingPanel) return; e.preventDefault(); panel.style.left = (e.touches[0].clientX - dragStartX) + 'px'; panel.style.top = (e.touches[0].clientY - dragStartY) + 'px'; }
+        function stopPanelDrag() { isDraggingPanel = false; document.removeEventListener('mousemove', onPanelDrag); document.removeEventListener('mouseup', stopPanelDrag); document.removeEventListener('touchmove', onPanelTouchDrag); document.removeEventListener('touchend', stopPanelDrag); }
+
+        window.renderProfileGraph = function() {
+            if(!window.currentProfile) return;
+            let zoom = document.getElementById('prof-zoom').value;
+            let thick = document.getElementById('prof-thick').value;
+            let d = window.currentProfile;
+            
+            let container = document.getElementById('prof-container');
+            let baseW = container.clientWidth; if(!baseW || baseW < 200) baseW = window.innerWidth * 0.8;
+            
+            let canvasW = baseW * zoom; let canvasH = container.clientHeight; 
+            let padTop = 100, padBot = 20; 
+
+            let canvas = document.getElementById('profile-canvas'); canvas.width = canvasW; canvas.height = canvasH;
+            let ctx = canvas.getContext('2d'); ctx.clearRect(0,0, canvasW, canvasH);
+
+            let range = d.maxE - d.minE; if(range === 0) range = 1;
+            let barWidth = canvasW / (d.elevations.length - 1);
+
+            let gridStep = range > 1000 ? 500 : range > 500 ? 200 : range > 200 ? 100 : 50;
+            let firstLine = Math.floor(d.minE / gridStep) * gridStep;
+            ctx.font = '10px Arial'; ctx.fillStyle = '#666'; ctx.lineWidth = 1;
+
+            for(let el = firstLine; el <= d.maxE; el += gridStep) {
+                if(el < d.minE) continue;
+                let y = canvasH - padBot - ((el - d.minE) / range) * (canvasH - padTop - padBot);
+                ctx.beginPath(); ctx.setLineDash([2, 4]); ctx.strokeStyle = '#ddd'; ctx.moveTo(0, y); ctx.lineTo(canvasW, y); ctx.stroke();
+                ctx.setLineDash([]); ctx.fillText(el + 'm', 5, y - 2);
             }
 
+            d.toponyms.forEach(poi => {
+                let x = poi.idx * barWidth; let el = d.elevations[poi.idx];
+                let y = canvasH - padBot - ((el - d.minE) / range) * (canvasH - padTop - padBot);
+                ctx.beginPath(); ctx.setLineDash([2, 2]); ctx.strokeStyle = '#999'; ctx.moveTo(x, y); ctx.lineTo(x, padTop); ctx.stroke(); ctx.setLineDash([]);
+                ctx.save(); ctx.translate(x, padTop - 5); ctx.rotate(-Math.PI/4); ctx.fillStyle = '#222'; ctx.font = 'bold 11px Arial'; ctx.textAlign = 'left'; ctx.fillText(poi.name, 0, 0); ctx.restore();
+            });
+
+            for(let i=0; i<d.elevations.length-1; i++) {
+                let x1 = i * barWidth; let y1 = canvasH - padBot - ((d.elevations[i] - d.minE) / range) * (canvasH - padTop - padBot);
+                let x2 = (i+1) * barWidth; let y2 = canvasH - padBot - ((d.elevations[i+1] - d.minE) / range) * (canvasH - padTop - padBot);
+                ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2 + 0.5, y2);
+                ctx.strokeStyle = d.colors[i] || '#007AFF'; ctx.lineWidth = thick; ctx.lineCap = 'round'; ctx.stroke();
+            }
+        };
+
+        const resizeObserver = new ResizeObserver(() => { if (document.getElementById('profile-panel').style.display === 'flex') renderProfileGraph(); });
+        window.addEventListener('DOMContentLoaded', () => { resizeObserver.observe(document.getElementById('profile-panel')); });
+
+        window.closeProfile = function() {
+            document.getElementById('profile-panel').style.display = 'none';
+            window.currentProfile = null; hideProfileHover();
+            if(rulerLine) { map.removeLayer(rulerLine); rulerLine = null; }
+            rulerMarkers.forEach(m => map.removeLayer(m)); rulerPts = []; rulerMarkers = [];
+        }
+
+        window.handleProfileHover = function(e) {
+            if(!window.currentProfile) return;
+            let container = document.getElementById('prof-container');
+            let rect = container.getBoundingClientRect();
+            let mouseX = (e.clientX || (e.touches ? e.touches[0].clientX : 0)) - rect.left + container.scrollLeft;
+            
+            let zoom = document.getElementById('prof-zoom').value;
+            let canvasW = container.clientWidth * zoom;
+            let barWidth = canvasW / (window.currentProfile.elevations.length - 1);
+            let index = Math.round(mouseX / barWidth);
+            
+            if (index >= 0 && index < window.currentProfile.samples.length) {
+                let sample = window.currentProfile.samples[index]; let el = window.currentProfile.elevations[index];
+                
+                if(!profileHoverMarker) { profileHoverMarker = L.circleMarker(sample, {radius: 6, color: 'black', fillColor: 'red', fillOpacity: 1, pane:'pane_top'}).addTo(map); } 
+                else { profileHoverMarker.setLatLng(sample); }
+                
+                let range = window.currentProfile.maxE - window.currentProfile.minE; if(range === 0) range = 1;
+                let padTop = 100, padBot = 20; let canvasH = container.clientHeight;
+                let y = canvasH - padBot - ((el - window.currentProfile.minE) / range) * (canvasH - padTop - padBot);
+                
+                document.getElementById('hover-line').style.display = 'block'; document.getElementById('hover-line').style.left = (index * barWidth) + 'px';
+                document.getElementById('hover-dot').style.display = 'block'; document.getElementById('hover-dot').style.left = (index * barWidth) + 'px'; document.getElementById('hover-dot').style.top = y + 'px';
+            }
+        }
+        
+        window.hideProfileHover = function() {
+            if(profileHoverMarker) { map.removeLayer(profileHoverMarker); profileHoverMarker = null; }
+            document.getElementById('hover-line').style.display = 'none'; document.getElementById('hover-dot').style.display = 'none';
+        }
+
+        async function finishRuler() {
+            if(rulerPts.length < 2) return; setActionBar('⏳ Échantillonnage Pixel Près...');
+            
+            let dist = 0; for(let i=0; i<rulerPts.length-1; i++) { dist += rulerPts[i].distanceTo(rulerPts[i+1]); }
+            let distStr = dist > 1000 ? (dist/1000).toFixed(2) + " km" : Math.round(dist) + " m";
+            
+            let dirData = calculateOverallBearing(rulerPts[0].lat, rulerPts[0].lng, rulerPts[rulerPts.length-1].lat, rulerPts[rulerPts.length-1].lng);
+            
+            // Résolution géographique ultra-précise
+            let numPoints = Math.min(800, Math.max(300, Math.floor(dist / 50))); 
+            let step = dist / numPoints; let samples = [];
+            
+            // INTERPOLATION MERCATOR (Aligne PARFAITEMENT les calculs sur le trait bleu visuel de la carte)
+            let zMercator = 12;
+            let mercatorPts = rulerPts.map(p => map.project(p, zMercator));
+            let pixelDist = 0; let segPixelDists = [];
+            for(let i=0; i<mercatorPts.length-1; i++) { let d = mercatorPts[i].distanceTo(mercatorPts[i+1]); pixelDist += d; segPixelDists.push(d); }
+            
+            let stepPixel = pixelDist / numPoints;
+            let currentPixelDist = 0; let pIdx = 0; let segD = segPixelDists[0];
+
+            for(let i=0; i<=numPoints; i++) {
+                let target = i * stepPixel;
+                while(target > currentPixelDist + segD && pIdx < mercatorPts.length - 2) { currentPixelDist += segD; pIdx++; segD = segPixelDists[pIdx]; }
+                let ratio = segD > 0 ? (target - currentPixelDist) / segD : 0; if (ratio > 1) ratio = 1;
+                let p1 = mercatorPts[pIdx]; let p2 = mercatorPts[pIdx+1];
+                let px = p1.x + (p2.x - p1.x) * ratio; let py = p1.y + (p2.y - p1.y) * ratio;
+                samples.push(map.unproject(L.point(px, py), zMercator));
+            }
+            
+            let mapZoom = Math.round(map.getZoom());
+            let elevations = await Promise.all(samples.map(p => getElevationAt(p.lat, p.lng)));
+            let pointColors = await Promise.all(samples.map(p => getDisplayedColor(p.lat, p.lng, mapZoom)));
+            
+            for(let i=0; i<elevations.length; i++) {
+                if(elevations[i] === null) {
+                    let prev = null; for(let j=i-1; j>=0; j--) if(elevations[j]!==null) {prev=elevations[j]; break;}
+                    let next = null; for(let j=i+1; j<elevations.length; j++) if(elevations[j]!==null) {next=elevations[j]; break;}
+                    if (prev !== null && next !== null) elevations[i] = prev + (next - prev)/2;
+                    else if (prev !== null) elevations[i] = prev; else if (next !== null) elevations[i] = next; else elevations[i] = 0; 
+                }
+            }
+            
+            let toponyms = [];
+            try {
+                let bounds = L.latLngBounds(samples); let bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
+                let res = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(`[out:json][timeout:3];(node["natural"="peak"](${bbox});node["place"~"city|town|village"](${bbox}););out 15;`)}`);
+                let data = await res.json();
+                data.elements.forEach(el => {
+                    if(el.tags && el.tags.name) {
+                        let minDist = Infinity; let closestIdx = -1; let poiLatLng = L.latLng(el.lat, el.lon);
+                        samples.forEach((s, idx) => { let d = s.distanceTo(poiLatLng); if(d < minDist) { minDist = d; closestIdx = idx; } });
+                        if(minDist < 2500) { toponyms.push({ name: el.tags.name, idx: closestIdx }); }
+                    }
+                });
+            } catch(e) {}
+            
+            let minE = Math.min(...elevations); let maxE = Math.max(...elevations);
+            window.currentProfile = { elevations, colors: pointColors, toponyms, minE, maxE, dist, samples };
+            
+            document.getElementById('prof-info').innerHTML = `<b>Dist: ${distStr}</b> | <b>Dénivelé: ${Math.round(minE)}m / ${Math.round(maxE)}m</b>`;
+            document.getElementById('dir-start').innerText = `A (${dirData.start})`; document.getElementById('dir-end').innerText = `B (${dirData.end})`;
+            
+            document.getElementById('profile-panel').style.display = 'flex';
+            activeTool = null; document.getElementById('btn-ruler').style.background = 'white'; setActionBar(null); map._container.style.cursor = '';
+            setTimeout(() => { window.renderProfileGraph(); }, 100);
+        }
+
+        // --- AUTRES COMPOSANTS ---
+        map.on('dblclick', async function(e) {
+            if (activeTool) return;
+            const geoWorldActive = layerDefs.find(l => l.id === 'geo_w' && l.active); const geoFrActive = layerDefs.find(l => l.id === 'geo_fr' && l.active);
+            let popupHtml = `<div class="geo-popup">`;
+            if (geoWorldActive) {
+                try {
+                    const res = await fetch(`https://macrostrat.org/api/v2/geologic_units/map?lat=${e.latlng.lat}&lng=${e.latlng.lng}`); const data = await res.json();
+                    if(data.success && data.success.data.length > 0) { popupHtml += `<b>🌍 Géo Monde :</b><br><b>Ère :</b> ${data.success.data[0].b_age} à ${data.success.data[0].t_age} Ma<br><b>Roche :</b> ${data.success.data[0].lith || 'Inconnu'}<br><br>`; }
+                } catch(err) {}
+            }
             if (geoFrActive) {
                 const legendUrl = `https://geoservices.brgm.fr/geologie?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetLegendGraphic&FORMAT=image/png&LAYER=GEOLOGIE`;
                 popupHtml += `<b>🇫🇷 Légende BRGM :</b><br><img src="${legendUrl}" alt="BRGM"><br>`;
-                
-                const size = map.getSize(); const bounds = map.getBounds();
-                const bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
-                const pt = map.latLngToContainerPoint(e.latlng);
-                
+                const bounds = map.getBounds(); const size = map.getSize(); const pt = map.latLngToContainerPoint(e.latlng); const bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
                 const infoUrl = `https://geoservices.brgm.fr/geologie?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetFeatureInfo&FORMAT=image/png&TRANSPARENT=true&QUERY_LAYERS=SCAN_GEOL50&LAYERS=SCAN_GEOL50&INFO_FORMAT=text/html&I=${Math.round(pt.x)}&J=${Math.round(pt.y)}&WIDTH=${size.x}&HEIGHT=${size.y}&CRS=EPSG:4326&BBOX=${bbox}`;
-                
-                popupHtml += `<b>Notice détaillée du sol :</b><br><iframe class="brgm-iframe" src="${infoUrl}"></iframe>`;
+                popupHtml += `<b>Notice détaillée :</b><br><iframe class="brgm-iframe" src="${infoUrl}"></iframe>`;
             }
-
             if(!geoWorldActive && !geoFrActive) popupHtml += `<i style="font-size:11px; color:#666;">Cochez une couche géologique pour analyser le sol.</i>`;
-
             L.popup().setLatLng(e.latlng).setContent(popupHtml + `</div>`).openOn(map);
         });
 
-        // --- 6. UTILITAIRES ---
-        function hexToRgb(h) { let b=parseInt(h.substring(1),16); return [(b>>16)&255, (b>>8)&255, b&255]; }
-        function rgbToHex(r,g,b) { return "#" + (1<<24 | r<<16 | g<<8 | b).toString(16).slice(1); }
-
+        function hexToRgb(h) { let b=parseInt(h.substring(1),16); return [(b>>16)&255, (b>>8)&255, b&255]; } function rgbToHex(r,g,b) { return "#" + (1<<24 | r<<16 | g<<8 | b).toString(16).slice(1); }
         function applyColors() {
-            colors.low = hexToRgb(document.getElementById('col-low').value);
-            colors.mid = hexToRgb(document.getElementById('col-mid').value);
-            colors.high = hexToRgb(document.getElementById('col-high').value);
-            if(layersObj['ele']) layersObj['ele']._updateMinMax();
+            colors.low = hexToRgb(document.getElementById('col-low').value); colors.mid = hexToRgb(document.getElementById('col-mid').value); colors.high = hexToRgb(document.getElementById('col-high').value);
+            if(layersObj['ele']) layersObj['ele']._updateMinMax(); updateLegend(layersObj['ele'] ? layersObj['ele']._currentMin : 0, layersObj['ele'] ? layersObj['ele']._currentMax : 1000);
         }
         ['col-low', 'col-mid', 'col-high'].forEach(id => document.getElementById(id).addEventListener('input', applyColors));
-
         function saveSettings() {
             const data = { layerDefs: layerDefs.map(d => ({id: d.id, active: d.active, op: d.op})), colLow: document.getElementById('col-low').value, colMid: document.getElementById('col-mid').value, colHigh: document.getElementById('col-high').value };
-            localStorage.setItem('mapRandoV19', JSON.stringify(data)); alert("Sauvegardé !");
+            localStorage.setItem('mapRandoV33', JSON.stringify(data)); alert("Sauvegardé !");
         }
-
         function loadSettings() {
-            const saved = JSON.parse(localStorage.getItem('mapRandoV19')); // CLÉ MODIFIÉE POUR APPLIQUER LES DEFAULTS
+            const saved = JSON.parse(localStorage.getItem('mapRandoV33'));
             if(saved) {
-                const newDefs = [];
-                saved.layerDefs.forEach(s => { const d = layerDefs.find(x => x.id === s.id); if(d){ d.active=s.active; d.op=s.op; newDefs.push(d);} });
-                layerDefs = newDefs;
+                let newDefs = []; saved.layerDefs.forEach(s => { let d = layerDefs.find(x => x.id === s.id); if(d){ d.active=s.active; d.op=s.op; newDefs.push(d);} }); layerDefs = newDefs;
                 document.getElementById('col-low').value = saved.colLow; document.getElementById('col-mid').value = saved.colMid; document.getElementById('col-high').value = saved.colHigh;
-            } else {
-                document.getElementById('col-low').value = rgbToHex(...colors.low); document.getElementById('col-mid').value = rgbToHex(...colors.mid); document.getElementById('col-high').value = rgbToHex(...colors.high);
-            }
+            } else { document.getElementById('col-low').value = rgbToHex(...colors.low); document.getElementById('col-mid').value = rgbToHex(...colors.mid); document.getElementById('col-high').value = rgbToHex(...colors.high); }
             initLayers(); applyColors();
         }
-
-        function resetSettings() { if(confirm("Effacer vos paramètres ?")) { localStorage.removeItem('mapRandoV19'); location.reload(); } }
+        function resetSettings() { if(confirm("Effacer vos paramètres ?")) { localStorage.removeItem('mapRandoV33'); location.reload(); } }
         function toggleSettings() { const p = document.getElementById('settings-panel'); p.style.display = p.style.display === 'flex' ? 'none' : 'flex'; }
-        
         function updateLegend(min, max) { 
-            const grad = `linear-gradient(to top, ${document.getElementById('col-low').value}, ${document.getElementById('col-mid').value}, ${document.getElementById('col-high').value})`;
-            document.getElementById('legend').innerHTML = `<div>${Math.round(max)}m</div><div class="color-bar" style="background: ${grad}"></div><div>${Math.round(min)}m</div>`; 
+            let eleL = layersObj['ele']; let lockBtn = (eleL && eleL._lockedMin !== null) ? `<span class="unlock-btn" onclick="resetElevationScale()" title="Déverrouiller le relief global">🔓</span>` : '';
+            document.getElementById('legend').innerHTML = `<div>${Math.round(max)}m${lockBtn}</div><div class="color-bar" style="background: linear-gradient(to top, ${document.getElementById('col-low').value}, ${document.getElementById('col-mid').value}, ${document.getElementById('col-high').value})"></div><div>${Math.round(min)}m</div>`; 
         }
-
         async function searchPlace() {
             const q = document.getElementById('search-input').value; if(!q) return;
-            try { const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`); const data = await res.json();
-                if(data.length > 0) map.flyTo([data[0].lat, data[0].lon], 13);
-            } catch(e) {}
+            try { const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`); const data = await res.json(); if(data.length > 0) map.flyTo([data[0].lat, data[0].lon], 13); } catch(e) {}
         }
-
-        function toggleFullScreen() {
-            if (!document.fullscreenElement) { document.documentElement.requestFullscreen().catch(e => alert("Mode plein écran non supporté.")); } 
-            else { if (document.exitFullscreen) document.exitFullscreen(); }
-        }
-
-        function locateUser() { 
-            document.getElementById('btn-locate').innerText = "⏳";
-            map.locate({setView: true, maxZoom: 14, enableHighAccuracy: true, timeout: 10000}); 
-        };
-
-        let uMarker; 
-        map.on('locationfound', function(e) { 
-            document.getElementById('btn-locate').innerText = "📍";
-            if(uMarker) map.removeLayer(uMarker); 
-            uMarker = L.circleMarker(e.latlng, {radius: 8, fillColor: "#007AFF", color: "#fff", weight: 3, fillOpacity: 1, pane: 'pane_top'}).addTo(map); 
-        });
-        map.on('locationerror', function(e) {
-            document.getElementById('btn-locate').innerText = "📍";
-        });
-
-        let gpxLayer;
-        function loadGPX(e) {
-            const file = e.target.files[0]; if (!file) return;
-            const reader = new FileReader();
+        function toggleFullScreen() { if (!document.fullscreenElement) { document.documentElement.requestFullscreen().catch(e => alert("Mode plein écran non supporté.")); } else { if (document.exitFullscreen) document.exitFullscreen(); } }
+        function locateUser() { document.getElementById('btn-locate').innerText = "⏳"; map.locate({setView: true, maxZoom: 14, enableHighAccuracy: true, timeout: 10000}); };
+        let uMarker; map.on('locationfound', function(e) { document.getElementById('btn-locate').innerText = "📍"; if(uMarker) map.removeLayer(uMarker); uMarker = L.circleMarker(e.latlng, {radius: 8, fillColor: "#007AFF", color: "#fff", weight: 3, fillOpacity: 1, pane: 'pane_top'}).addTo(map); });
+        map.on('locationerror', function(e) { document.getElementById('btn-locate').innerText = "📍"; });
+        let gpxLayer; function loadGPX(e) {
+            const file = e.target.files[0]; if (!file) return; const reader = new FileReader();
             reader.onload = function(evt) {
                 const trackpoints = new DOMParser().parseFromString(evt.target.result, "text/xml").getElementsByTagName("trkpt");
                 const latlngs = Array.from(trackpoints).map(p => [parseFloat(p.getAttribute("lat")), parseFloat(p.getAttribute("lon"))]);
-                if(latlngs.length > 0) {
-                    if(gpxLayer) map.removeLayer(gpxLayer);
-                    map.createPane('pane_gpx'); map.getPane('pane_gpx').style.zIndex = 400; 
-                    gpxLayer = L.polyline(latlngs, {color: 'red', weight: 4, pane: 'pane_gpx'}).addTo(map);
-                    map.fitBounds(gpxLayer.getBounds()); toggleSettings();
-                }
-            };
-            reader.readAsText(file);
+                if(latlngs.length > 0) { if(gpxLayer) map.removeLayer(gpxLayer); map.createPane('pane_gpx'); map.getPane('pane_gpx').style.zIndex = 400; gpxLayer = L.polyline(latlngs, {color: 'red', weight: 4, pane: 'pane_gpx'}).addTo(map); map.fitBounds(gpxLayer.getBounds()); toggleSettings(); }
+            }; reader.readAsText(file);
         }
 
-        loadSettings();
-        
-        // --- 7. ACTIONS AU DÉMARRAGE ---
-        // Lancer la géolocalisation automatiquement à l'ouverture
-        locateUser();
+        loadSettings(); locateUser();
     </script>
 </body>
 </html>
