@@ -6,7 +6,6 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗺️</text></svg>">
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=2">
     <title>Carte Rando Pro V33</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -170,16 +169,6 @@
         let colors = { low: [60,176,67], mid: [255,235,59], high: [139,69,19] };
 
         const map = L.map('map', { zoomControl: false, doubleClickZoom: true }).setView([45.92, 6.86], 10);
-                // ==== AJOUT : SAUVEGARDE & RESTAURATION DE LA VUE ====
-        const savedView = JSON.parse(localStorage.getItem('mapRandoPositionV33'));
-        if (savedView) {
-            map.setView([savedView.lat, savedView.lng], savedView.zoom);
-        }
-        map.on('moveend', function() {
-            const center = map.getCenter();
-            localStorage.setItem('mapRandoPositionV33', JSON.stringify({ lat: center.lat, lng: center.lng, zoom: map.getZoom() }));
-        });
-        // =====================================================
         L.control.zoom({ position: 'bottomleft' }).addTo(map);
         L.control.scale({ position: 'bottomleft', imperial: false }).addTo(map);
 
@@ -810,8 +799,7 @@
             }; reader.readAsText(file);
         }
 
-        loadSettings(); 
-        // locateUser(); // Retiré du démarrage pour ne pas écraser la position sauvegardée
+        loadSettings(); locateUser();
     </script>
 </body>
 </html>
