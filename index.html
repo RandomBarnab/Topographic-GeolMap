@@ -55,6 +55,19 @@
         #tool-actions { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 2000; display: none; }
         #tool-actions .action-btn { padding: 12px 24px; font-size: 15px; border-radius: 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); text-transform: uppercase; letter-spacing: 0.5px; background: #34c759;}
 
+        /* EXPORT PDF HAUTE RÉSOLUTION */
+        #pdf-export-panel { position: absolute; right: 65px; bottom: 25px; z-index: 2001; width: min(360px, calc(100vw - 90px)); display: none; flex-direction: column; gap: 12px; background: rgba(255,255,255,.97); padding: 15px; border-radius: 12px; box-shadow: 0 4px 18px rgba(0,0,0,.45); backdrop-filter: blur(5px); }
+        #pdf-export-panel h3 { padding-right: 22px; }
+        .pdf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .pdf-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; }
+        .pdf-grid select, .pdf-grid input { width: 100%; box-sizing: border-box; padding: 7px; border: 1px solid #ccc; border-radius: 6px; background: white; }
+        .pdf-help { margin: 0; color: #555; font-size: 11px; line-height: 1.35; }
+        #pdf-progress { display: none; font-size: 12px; color: #555; text-align: center; }
+        @media (max-width: 600px) {
+            #pdf-export-panel { right: 15px; bottom: 80px; width: calc(100vw - 30px); }
+            .presets-container { left: 15px; bottom: 80px; max-width: calc(100vw - 30px); overflow-x: auto; }
+        }
+
         /* PANNEAU DE COUPE FLOTTANT (DÉPLAÇABLE & REDIMENSIONNABLE) */
         #profile-panel {
             position: absolute; top: 10vh; left: 10vw; width: 80vw; height: 45vh; min-height: 250px; min-width: 320px;
@@ -124,6 +137,44 @@
     <div id="map"></div>
     <div class="legend-box" id="legend">0m<div class="color-bar" style="background: linear-gradient(to top, green, yellow, brown)"></div>0m</div>
 
+    <div id="pdf-export-panel">
+        <div class="close-btn" style="position:absolute; top:12px; right:8px;" onclick="togglePdfExport()">✖</div>
+        <h3>📄 Exporter la zone en PDF</h3>
+        <p class="pdf-help">Sélectionnez d'abord une zone avec ✏️. L'export reconstruit la carte avec les tuiles des couches actives, il ne s'agit pas d'une capture d'écran.</p>
+        <div class="pdf-grid">
+            <label>Format
+                <select id="pdf-paper">
+                    <option value="a4">A4</option>
+                    <option value="a3">A3</option>
+                    <option value="a2">A2</option>
+                </select>
+            </label>
+            <label>Orientation
+                <select id="pdf-orientation">
+                    <option value="landscape">Paysage</option>
+                    <option value="portrait">Portrait</option>
+                </select>
+            </label>
+            <label>Détail des tuiles
+                <select id="pdf-quality">
+                    <option value="1">Standard</option>
+                    <option value="2" selected>Élevé</option>
+                    <option value="3">Très élevé</option>
+                    <option value="4">Maximum</option>
+                </select>
+            </label>
+            <label>Densité PDF
+                <select id="pdf-dpi">
+                    <option value="150">150 dpi</option>
+                    <option value="200">200 dpi</option>
+                    <option value="300" selected>300 dpi</option>
+                </select>
+            </label>
+        </div>
+        <button class="action-btn" style="background:#ff9500;" onclick="exportSelectedAreaToPdf()">⬇️ Générer le PDF</button>
+        <div id="pdf-progress">Préparation de l'export…</div>
+    </div>
+
     <div id="settings-panel">
         <div class="close-btn" style="position: absolute; top:15px;" onclick="toggleSettings()">✖</div>
         <h3>Réglages V33</h3>
@@ -147,12 +198,14 @@
     <div class="controls-container" onmousedown="event.stopPropagation()" ondblclick="event.stopPropagation()">
         <div class="custom-control" id="btn-ruler" onclick="toggleRuler()" title="Règle (Coupe du relief détaillée)">📏</div>
         <div class="custom-control" id="btn-pencil" onclick="togglePencil()" title="Crayon (Sélectionner zone en 2 clics)">✏️</div>
+        <div class="custom-control" id="btn-pdf" onclick="togglePdfExport()" title="Exporter la zone sélectionnée en PDF">📄</div>
         <div class="custom-control" onclick="toggleFullScreen()" title="Plein Écran">⛶</div>
         <div class="custom-control" onclick="toggleSettings()" title="Réglages">⚙️</div>
         <div class="custom-control" id="btn-locate" onclick="locateUser()" title="Me localiser">📍</div>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script>
         // --- 1. CONFIGURATION DES COUCHES ---
         let layerDefs = [
@@ -356,6 +409,7 @@
         // --- 4. GESTION DES OUTILS : CRAYON (2 Clics) & RÈGLE ---
         let activeTool = null;
         let pencilPts = [], pencilMarkers = [], drawRect = null;
+        let lastSelectionBounds = null;
         let rulerPts = [], rulerLine = null, rulerMarkers = [];
 
         function setActionBar(text) {
@@ -432,6 +486,8 @@
             setActionBar('⏳ Calcul de zone...');
             
             let bounds = L.latLngBounds(pencilPts[0], pencilPts[1]);
+            // On conserve la dernière zone pour l'export PDF après validation du crayon.
+            lastSelectionBounds = bounds;
             let stepLat = (bounds.getNorth() - bounds.getSouth()) / 20;
             let stepLng = (bounds.getEast() - bounds.getWest()) / 20;
             let promises = [];
@@ -456,6 +512,220 @@
             // On valide mais on laisse l'outil ouvert et la mémoire du Crayon active
             activeTool = null; document.getElementById('btn-pencil').style.background = 'white';
             clearPencil(); setActionBar(null); map._container.style.cursor = '';
+        }
+
+        // --- EXPORT PDF HAUTE RÉSOLUTION, PAR RECOMPOSITION DES TUILES ---
+        const exportImageCache = {};
+        const PDF_PAPER_MM = { a4: [297, 210], a3: [420, 297], a2: [594, 420] };
+
+        function togglePdfExport() {
+            const panel = document.getElementById('pdf-export-panel');
+            panel.style.display = panel.style.display === 'flex' ? 'none' : 'flex';
+        }
+
+        function setPdfProgress(text, visible = true) {
+            const el = document.getElementById('pdf-progress');
+            el.textContent = text;
+            el.style.display = visible ? 'block' : 'none';
+        }
+
+        function getExportTileUrls(def, z, x, y) {
+            const world = Math.pow(2, z);
+            const wrappedX = ((x % world) + world) % world;
+            if (y < 0 || y >= world) return [];
+            const coords = L.point(wrappedX, y); coords.z = z;
+
+            if (def.id === 'ele') {
+                return [`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${wrappedX}/${y}.png`];
+            }
+            if (def.id === 'water') {
+                return [`https://a.basemaps.cartocdn.com/rastertiles/voyager_nolabels/${z}/${wrappedX}/${y}.png`];
+            }
+            if (def.id === 'top') {
+                return [
+                    `https://tile.waymarkedtrails.org/hiking/${z}/${wrappedX}/${y}.png`,
+                    `https://a.basemaps.cartocdn.com/rastertiles/voyager_only_labels/${z}/${wrappedX}/${y}.png`
+                ];
+            }
+            const layer = layersObj[def.id];
+            if (!layer || typeof layer.getTileUrl !== 'function') return [];
+            return [layer.getTileUrl(coords)];
+        }
+
+        function fetchExportImage(url) {
+            if (exportImageCache[url]) return exportImageCache[url];
+            exportImageCache[url] = new Promise(resolve => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                const timeout = setTimeout(() => { img.src = ''; resolve(null); }, 15000);
+                img.onload = () => { clearTimeout(timeout); resolve(img); };
+                img.onerror = () => { clearTimeout(timeout); resolve(null); };
+                img.src = url;
+            });
+            return exportImageCache[url];
+        }
+
+        function paintTerrariumTile(img, fixedMin, fixedMax) {
+            const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+            const ctx = c.getContext('2d', { willReadFrequently: true });
+            ctx.drawImage(img, 0, 0, 256, 256);
+            const src = ctx.getImageData(0, 0, 256, 256);
+            const out = ctx.createImageData(256, 256);
+            const range = Math.max(1, fixedMax - fixedMin);
+            for (let i = 0; i < src.data.length; i += 4) {
+                const el = (src.data[i] * 256 + src.data[i + 1] + src.data[i + 2] / 256) - 32768;
+                let t = Math.max(0, Math.min(1, (el - fixedMin) / range));
+                let r, g, b;
+                if (t < 0.5) {
+                    const q = t * 2; r = colors.low[0] + (colors.mid[0] - colors.low[0]) * q; g = colors.low[1] + (colors.mid[1] - colors.low[1]) * q; b = colors.low[2] + (colors.mid[2] - colors.low[2]) * q;
+                } else {
+                    const q = (t - 0.5) * 2; r = colors.mid[0] + (colors.high[0] - colors.mid[0]) * q; g = colors.mid[1] + (colors.high[1] - colors.mid[1]) * q; b = colors.mid[2] + (colors.high[2] - colors.mid[2]) * q;
+                }
+                const brightness = 0.5 + (t * 0.7);
+                out.data[i] = Math.min(255, r * brightness); out.data[i + 1] = Math.min(255, g * brightness); out.data[i + 2] = Math.min(255, b * brightness); out.data[i + 3] = 255;
+            }
+            ctx.putImageData(out, 0, 0);
+            return c;
+        }
+
+        function paintWaterTile(img) {
+            const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+            const ctx = c.getContext('2d', { willReadFrequently: true });
+            ctx.drawImage(img, 0, 0, 256, 256);
+            const data = ctx.getImageData(0, 0, 256, 256);
+            for (let i = 0; i < data.data.length; i += 4) {
+                if (data.data[i + 2] > data.data[i] + 10 && data.data[i + 2] > data.data[i + 1]) {
+                    data.data[i] = 0; data.data[i + 1] = 100; data.data[i + 2] = 200; data.data[i + 3] = 150;
+                } else data.data[i + 3] = 0;
+            }
+            ctx.putImageData(data, 0, 0);
+            return c;
+        }
+
+        async function drawExportLayer(ctx, def, geometry, exportZoom, totalTiles, progressState) {
+            const { tileMinX, tileMaxX, tileMinY, tileMaxY, cropX, cropY, cropW, cropH } = geometry;
+            const stage = document.createElement('canvas');
+            stage.width = (tileMaxX - tileMinX + 1) * 256; stage.height = (tileMaxY - tileMinY + 1) * 256;
+            const sctx = stage.getContext('2d');
+            sctx.globalAlpha = Math.max(0, Math.min(1, def.op / 100));
+            if (def.id === 'base_lines') {
+                sctx.filter = 'grayscale(100%) brightness(105%) contrast(150%)';
+                sctx.globalCompositeOperation = 'multiply';
+            }
+
+            for (let y = tileMinY; y <= tileMaxY; y++) {
+                for (let x = tileMinX; x <= tileMaxX; x++) {
+                    const urls = getExportTileUrls(def, exportZoom, x, y);
+                    for (const url of urls) {
+                        const img = await fetchExportImage(url);
+                        if (img) {
+                            let tile = img;
+                            if (def.id === 'ele') {
+                                const ele = layersObj.ele;
+                                tile = paintTerrariumTile(img, ele ? ele._currentMin : 0, ele ? ele._currentMax : 1000);
+                            } else if (def.id === 'water') tile = paintWaterTile(img);
+                            sctx.drawImage(tile, (x - tileMinX) * 256, (y - tileMinY) * 256, 256, 256);
+                        }
+                        progressState.done++;
+                        setPdfProgress(`Chargement des couches… ${Math.round(progressState.done / totalTiles * 100)} %`);
+                    }
+                }
+            }
+            sctx.filter = 'none'; sctx.globalCompositeOperation = 'source-over'; sctx.globalAlpha = 1;
+            ctx.drawImage(stage, cropX, cropY, cropW, cropH, 0, 0, geometry.outputW, geometry.outputH);
+        }
+
+        function getExportGeometry(bounds, z, maxSide = 6000, maxPixels = 24000000) {
+            const nw = map.project(bounds.getNorthWest(), z);
+            const se = map.project(bounds.getSouthEast(), z);
+            const rawW = Math.max(1, Math.ceil(se.x - nw.x));
+            const rawH = Math.max(1, Math.ceil(se.y - nw.y));
+            const scale = Math.min(1, maxSide / Math.max(rawW, rawH), Math.sqrt(maxPixels / (rawW * rawH)));
+            const outputW = Math.max(1, Math.round(rawW * scale));
+            const outputH = Math.max(1, Math.round(rawH * scale));
+            const tileMinX = Math.floor(nw.x / 256), tileMaxX = Math.floor((se.x - 0.001) / 256);
+            const tileMinY = Math.floor(nw.y / 256), tileMaxY = Math.floor((se.y - 0.001) / 256);
+            return { nw, se, rawW, rawH, outputW, outputH, tileMinX, tileMaxX, tileMinY, tileMaxY, cropX: nw.x - tileMinX * 256, cropY: nw.y - tileMinY * 256, cropW: rawW, cropH: rawH };
+        }
+
+        function getActiveExportAttribution() {
+            const ids = new Set(layerDefs.filter(d => d.active).map(d => d.id));
+            const sources = ['© OpenStreetMap contributors'];
+            if (ids.has('base_lines') || ids.has('base_full')) sources.push('OpenTopoMap');
+            if (ids.has('top')) sources.push('Waymarked Trails');
+            if (ids.has('water')) sources.push('CARTO');
+            if (ids.has('geo_w') || ids.has('geo_fr')) sources.push('Macrostrat / BRGM');
+            if (ids.has('ele')) sources.push('AWS Terrain Tiles');
+            return sources.join(' • ');
+        }
+
+        async function exportSelectedAreaToPdf() {
+            if (!lastSelectionBounds) {
+                alert('Sélectionnez d’abord une zone avec le bouton ✏️, en cliquant deux coins opposés.');
+                togglePdfExport(); togglePencil(); return;
+            }
+            if (!window.jspdf || !window.jspdf.jsPDF) {
+                alert('La bibliothèque PDF n’est pas disponible. Vérifiez votre connexion Internet puis réessayez.'); return;
+            }
+            const paper = document.getElementById('pdf-paper').value;
+            const orientation = document.getElementById('pdf-orientation').value;
+            const quality = Number(document.getElementById('pdf-quality').value);
+            const dpi = Number(document.getElementById('pdf-dpi').value);
+            const paperMm = PDF_PAPER_MM[paper];
+            const pageWmm = orientation === 'landscape' ? paperMm[0] : paperMm[1];
+            const pageHmm = orientation === 'landscape' ? paperMm[1] : paperMm[0];
+            const marginMm = 8;
+            const contentWmm = pageWmm - 2 * marginMm, contentHmm = pageHmm - 2 * marginMm;
+            const maxPageSide = 6000;
+            const targetW = Math.min(maxPageSide, Math.round(contentWmm / 25.4 * dpi));
+            const targetH = Math.min(maxPageSide, Math.round(contentHmm / 25.4 * dpi));
+
+            const active = layerDefs.filter(d => d.active);
+            if (!active.length) { alert('Aucune couche active à exporter.'); return; }
+            setPdfProgress('Préparation de la zone…');
+            const button = document.querySelector('#pdf-export-panel .action-btn'); button.disabled = true;
+            try {
+                let exportZoom = Math.max(1, Math.min(18, Math.round(map.getZoom()) + quality));
+                let geometry = getExportGeometry(lastSelectionBounds, exportZoom);
+                while ((geometry.rawW > 6000 || geometry.rawH > 6000 || geometry.rawW * geometry.rawH > 24000000) && exportZoom > 1) {
+                    exportZoom--; geometry = getExportGeometry(lastSelectionBounds, exportZoom);
+                }
+                const totalTiles = active.reduce((n, d) => n + (geometry.tileMaxX - geometry.tileMinX + 1) * (geometry.tileMaxY - geometry.tileMinY + 1) * getExportTileUrls(d, exportZoom, geometry.tileMinX, geometry.tileMinY).length, 0);
+                const progressState = { done: 0 };
+                const mapCanvas = document.createElement('canvas'); mapCanvas.width = geometry.outputW; mapCanvas.height = geometry.outputH;
+                const mapCtx = mapCanvas.getContext('2d'); mapCtx.fillStyle = '#fff'; mapCtx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
+                for (const def of active.slice().reverse()) await drawExportLayer(mapCtx, def, geometry, exportZoom, Math.max(1, totalTiles), progressState);
+
+                // Ajout du GPX importé, s'il existe, comme tracé vectoriel dans le PDF.
+                if (gpxLayer && gpxLayer.getLatLngs) {
+                    const pts = gpxLayer.getLatLngs(); mapCtx.save(); mapCtx.strokeStyle = '#e53935'; mapCtx.lineWidth = Math.max(2, geometry.outputW / 1800); mapCtx.beginPath();
+                    pts.forEach((p, i) => { const q = map.project(p, exportZoom); const x = (q.x - geometry.nw.x) * geometry.outputW / geometry.rawW; const y = (q.y - geometry.nw.y) * geometry.outputH / geometry.rawH; if (i) mapCtx.lineTo(x, y); else mapCtx.moveTo(x, y); }); mapCtx.stroke(); mapCtx.restore();
+                }
+
+                setPdfProgress('Mise en page du PDF…');
+                const pdfCanvas = document.createElement('canvas');
+                const mapRatio = mapCanvas.width / mapCanvas.height;
+                const pageRatio = contentWmm / contentHmm;
+                let drawW = targetW, drawH = Math.round(targetW / mapRatio);
+                if (drawH > targetH) { drawH = targetH; drawW = Math.round(targetH * mapRatio); }
+                pdfCanvas.width = drawW; pdfCanvas.height = drawH;
+                const pctx = pdfCanvas.getContext('2d'); pctx.fillStyle = '#fff'; pctx.fillRect(0, 0, drawW, drawH); pctx.drawImage(mapCanvas, 0, 0, drawW, drawH);
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF({ orientation, unit: 'mm', format: paper, compress: true });
+                const xMm = (pageWmm - drawW / dpi * 25.4) / 2;
+                const yMm = (pageHmm - drawH / dpi * 25.4) / 2;
+                doc.addImage(pdfCanvas.toDataURL('image/jpeg', 0.96), 'JPEG', xMm, yMm, drawW / dpi * 25.4, drawH / dpi * 25.4, undefined, 'FAST');
+                doc.setFontSize(6); doc.setTextColor(100); doc.text(`${getActiveExportAttribution()} • Niveau de tuiles ${exportZoom}`, marginMm, pageHmm - 3);
+                const now = new Date().toISOString().slice(0, 10);
+                doc.save(`carte-rando-${now}.pdf`);
+                setPdfProgress('PDF généré.');
+            } catch (err) {
+                console.error(err); alert('Impossible de générer le PDF. Certaines tuiles peuvent bloquer l’export par restriction CORS.');
+                setPdfProgress('Échec de l’export.');
+            } finally {
+                button.disabled = false;
+                setTimeout(() => setPdfProgress('', false), 3000);
+            }
         }
 
         // --- MOTEUR DE COULEUR (INTERPOLATION MERCATOR & FILTRE ANTI-BRUIT) ---
