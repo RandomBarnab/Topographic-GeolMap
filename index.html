@@ -6,7 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗺️</text></svg>">
-    <title>Carte Rando Pro V35</title>
+    <title>Carte Rando Pro V36</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
@@ -210,12 +210,12 @@
         // --- 1. CONFIGURATION DES COUCHES ---
         let layerDefs = [
             { id: 'top', name: 'Noms & Sentiers (GR)', type: 'group', op: 100, active: false },
-            { id: 'base_lines', name: 'Lignes Topo CSS (On Top)', type: 'topoblend', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', op: 70, active: true },
+            { id: 'base_lines', name: 'Lignes Topo CSS (On Top)', type: 'topoblend', url: 'https://tile.openmaps.fr/opentopomap/{z}/{x}/{y}.png', op: 70, active: true },
             { id: 'water', name: 'Eau du Monde', type: 'water_canvas', url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png', op: 100, active: true },
             { id: 'ele', name: 'Relief Dynamique', type: 'custom', op: 70, active: true },
             { id: 'geo_w', name: 'Géologie (Monde)', type: 'xyz', url: 'https://tiles.macrostrat.org/carto/{z}/{x}/{y}.png', op: 80, active: true },
             { id: 'geo_fr', name: 'Géologie (France BRGM)', type: 'wms', url: 'https://geoservices.brgm.fr/geologie', wmsLayer: 'GEOLOGIE', op: 60, active: false },
-            { id: 'base_full', name: 'Complete Open Topo (Fond)', type: 'xyz', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', op: 100, active: false }
+            { id: 'base_full', name: 'Complete Open Topo (Fond)', type: 'xyz', url: 'https://tile.openmaps.fr/opentopomap/{z}/{x}/{y}.png', op: 100, active: false }
         ];
 
         let layersObj = {};
@@ -224,6 +224,8 @@
         const map = L.map('map', { zoomControl: false, doubleClickZoom: true }).setView([45.92, 6.86], 10);
         L.control.zoom({ position: 'bottomleft' }).addTo(map);
         L.control.scale({ position: 'bottomleft', imperial: false }).addTo(map);
+        L.control.attribution({ prefix: false, position: 'topright' }).addTo(map)
+            .addAttribution('<a href="https://github.com/sletuffe/OpenTopoMap" target="_blank">© OpenTopoMap-R</a> · <a href="https://openmaps.fr/donate" target="_blank">OpenMaps.fr</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank">© OpenStreetMap</a>');
 
         window.addEventListener('resize', () => map.invalidateSize());
 
@@ -345,10 +347,10 @@
                 }
                 if(!layersObj[def.id]) {
                     let l;
-                    if(def.type === 'xyz' || def.type === 'topoblend') { l = L.tileLayer(def.url, { maxZoom: 18, pane: `pane_${def.id}`, crossOrigin: true }); }
+                    if(def.type === 'xyz' || def.type === 'topoblend') { l = L.tileLayer(def.url, { maxZoom: 18, pane: `pane_${def.id}`, crossOrigin: 'anonymous' }); }
                     else if(def.type === 'water_canvas') { l = new L.WaterCanvasLayer({ pane: `pane_${def.id}`, maxZoom: 18, crossOrigin: true }); }
-                    else if(def.type === 'wms') l = L.tileLayer.wms(def.url, { layers: def.wmsLayer, format: 'image/png', transparent: true, pane: `pane_${def.id}`, crossOrigin: true });
-                    else if(def.type === 'group') { l = L.layerGroup([ L.tileLayer('https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png', { maxZoom: 18, pane: `pane_${def.id}` }), L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', { maxZoom: 20, pane: `pane_${def.id}` }) ]); } 
+                    else if(def.type === 'wms') l = L.tileLayer.wms(def.url, { layers: def.wmsLayer, format: 'image/png', transparent: true, pane: `pane_${def.id}`, crossOrigin: 'anonymous' });
+                    else if(def.type === 'group') { l = L.layerGroup([ L.tileLayer('https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png', { maxZoom: 18, pane: `pane_${def.id}`, crossOrigin: 'anonymous' }), L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', { maxZoom: 20, pane: `pane_${def.id}`, crossOrigin: 'anonymous' }) ]); } 
                     else if(def.type === 'custom') l = new L.DynamicElevationLayer({ pane: `pane_${def.id}` });
                     layersObj[def.id] = l;
                 }
@@ -703,7 +705,7 @@
         function getActiveExportAttribution() {
             const ids = new Set(layerDefs.filter(d => d.active).map(d => d.id));
             const sources = ['© OpenStreetMap contributors'];
-            if (ids.has('base_lines') || ids.has('base_full')) sources.push('OpenTopoMap');
+            if (ids.has('base_lines') || ids.has('base_full')) sources.push('OpenTopoMap-R via OpenMaps.fr');
             if (ids.has('top')) sources.push('Waymarked Trails');
             if (ids.has('water')) sources.push('CARTO');
             if (ids.has('geo_w') || ids.has('geo_fr')) sources.push('Macrostrat / BRGM');
