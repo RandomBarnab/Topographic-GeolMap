@@ -629,34 +629,59 @@
         async function drawExportLayer(ctx, def, geometry, exportZoom, totalTiles, progressState) {
             const { tileMinX, tileMaxX, tileMinY, tileMaxY, cropX, cropY, cropW, cropH } = geometry;
             const stage = document.createElement('canvas');
-            stage.width = (tileMaxX - tileMinX + 1) * 256; stage.height = (tileMaxY - tileMinY + 1) * 256;
+            stage.width = (tileMaxX - tileMinX + 1) * 256;
+            stage.height = (tileMaxY - tileMinY + 1) * 256;
             const sctx = stage.getContext('2d');
-            sctx.globalAlpha = Math.max(0, Math.min(1, def.op / 100));
-            if (def.id === 'base_lines') {
-                sctx.filter = 'grayscale(100%) brightness(105%) contrast(150%)';
-                sctx.globalCompositeOperation = 'multiply';
-            }
 
+            // Les tuiles sont d'abord dessinées normalement sur leur propre canevas.
+            // Le mode "multiply" de la couche topo est appliqué uniquement lors de
+            // la composition sur la carte finale, comme le faisait le CSS Leaflet.
+            if (def.id === 'base_lines') sctx.filter = 'grayscale(100%) brightness(105%) contrast(150%)';
+
+            const jobs = [];
             for (let y = tileMinY; y <= tileMaxY; y++) {
                 for (let x = tileMinX; x <= tileMaxX; x++) {
-                    const urls = getExportTileUrls(def, exportZoom, x, y);
-                    for (const url of urls) {
-                        const img = await fetchExportImage(url);
-                        if (img) {
-                            let tile = img;
-                            if (def.id === 'ele') {
-                                const ele = layersObj.ele;
-                                tile = paintTerrariumTile(img, ele ? ele._currentMin : 0, ele ? ele._currentMax : 1000);
-                            } else if (def.id === 'water') tile = paintWaterTile(img);
-                            sctx.drawImage(tile, (x - tileMinX) * 256, (y - tileMinY) * 256, 256, 256);
+                    getExportTileUrls(def, exportZoom, x, y).forEach(url => jobs.push({ x, y, url }));
+                }
+            }
+
+            let cursor = 0;
+            const worker = async () => {
+                while (true) {
+                    const index = cursor++;
+                    if (index >= jobs.length) return;
+                    const job = jobs[index];
+                    const img = await fetchExportImage(job.url);
+                    if (img) {
+                        let tile = img;
+                        if (def.id === 'ele') {
+                            const ele = layersObj.ele;
+                            tile = paintTerrariumTile(img, ele ? ele._currentMin : 0, ele ? ele._currentMax : 1000);
+                        } else if (def.id === 'water') {
+                            tile = paintWaterTile(img);
                         }
-                        progressState.done++;
+                        sctx.drawImage(tile, (job.x - tileMinX) * 256, (job.y - tileMinY) * 256, 256, 256);
+                    }
+                    progressState.done++;
+                    const now = performance.now();
+                    if (now - progressState.lastUiUpdate > 100 || progressState.done >= totalTiles) {
+                        progressState.lastUiUpdate = now;
                         setPdfProgress(`Chargement des couches… ${Math.round(progressState.done / totalTiles * 100)} %`);
                     }
                 }
-            }
-            sctx.filter = 'none'; sctx.globalCompositeOperation = 'source-over'; sctx.globalAlpha = 1;
+            };
+
+            // Huit requêtes en parallèle donnent un gain important sur mobile,
+            // sans saturer le navigateur ni les serveurs de tuiles.
+            const workerCount = Math.min(8, Math.max(1, jobs.length));
+            await Promise.all(Array.from({ length: workerCount }, worker));
+
+            sctx.filter = 'none';
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, Math.min(1, def.op / 100));
+            if (def.id === 'base_lines') ctx.globalCompositeOperation = 'multiply';
             ctx.drawImage(stage, cropX, cropY, cropW, cropH, 0, 0, geometry.outputW, geometry.outputH);
+            ctx.restore();
         }
 
         function getExportGeometry(bounds, z, maxSide = 6000, maxPixels = 24000000) {
@@ -709,13 +734,22 @@
             setPdfProgress('Préparation de la zone…');
             const button = document.querySelector('#pdf-export-panel .action-btn'); button.disabled = true;
             try {
-                let exportZoom = Math.max(1, Math.min(18, Math.round(map.getZoom()) + quality));
+                // La qualité correspond à un nombre limité de niveaux supplémentaires.
+                // Cela évite une explosion exponentielle du nombre de tuiles en mode maximum.
+                const qualityOffset = { 1: 0, 2: 1, 3: 2, 4: 3 }[quality] || 1;
+                let exportZoom = Math.max(1, Math.min(18, Math.round(map.getZoom()) + qualityOffset));
                 let geometry = getExportGeometry(lastSelectionBounds, exportZoom);
-                while ((geometry.rawW > 6000 || geometry.rawH > 6000 || geometry.rawW * geometry.rawH > 24000000) && exportZoom > 1) {
+                const estimateRequests = () => active.reduce((n, d) => n +
+                    (geometry.tileMaxX - geometry.tileMinX + 1) *
+                    (geometry.tileMaxY - geometry.tileMinY + 1) *
+                    getExportTileUrls(d, exportZoom, geometry.tileMinX, geometry.tileMinY).length, 0);
+                // Au-delà de 800 requêtes, on baisse automatiquement le zoom export.
+                // La carte garde toutes ses couches, mais évite de devenir inutilisable.
+                while ((geometry.rawW > 6000 || geometry.rawH > 6000 || geometry.rawW * geometry.rawH > 24000000 || estimateRequests() > 800) && exportZoom > 1) {
                     exportZoom--; geometry = getExportGeometry(lastSelectionBounds, exportZoom);
                 }
-                const totalTiles = active.reduce((n, d) => n + (geometry.tileMaxX - geometry.tileMinX + 1) * (geometry.tileMaxY - geometry.tileMinY + 1) * getExportTileUrls(d, exportZoom, geometry.tileMinX, geometry.tileMinY).length, 0);
-                const progressState = { done: 0 };
+                const totalTiles = Math.max(1, estimateRequests());
+                const progressState = { done: 0, lastUiUpdate: 0 };
                 const mapCanvas = document.createElement('canvas'); mapCanvas.width = geometry.outputW; mapCanvas.height = geometry.outputH;
                 const mapCtx = mapCanvas.getContext('2d'); mapCtx.fillStyle = '#fff'; mapCtx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
                 for (const def of active.slice().reverse()) await drawExportLayer(mapCtx, def, geometry, exportZoom, Math.max(1, totalTiles), progressState);
