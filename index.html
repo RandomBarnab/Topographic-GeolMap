@@ -6,7 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗺️</text></svg>">
-    <title>Carte Rando Pro V33</title>
+    <title>Carte Rando Pro V35</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
@@ -636,7 +636,7 @@
             // Les tuiles sont d'abord dessinées normalement sur leur propre canevas.
             // Le mode "multiply" de la couche topo est appliqué uniquement lors de
             // la composition sur la carte finale, comme le faisait le CSS Leaflet.
-            if (def.id === 'base_lines') sctx.filter = 'grayscale(100%) brightness(105%) contrast(150%)';
+            if (def.id === 'base_lines') sctx.filter = 'grayscale(100%) brightness(105%) contrast(170%)';
 
             const jobs = [];
             for (let y = tileMinY; y <= tileMaxY; y++) {
@@ -679,7 +679,10 @@
             sctx.filter = 'none';
             ctx.save();
             ctx.globalAlpha = Math.max(0, Math.min(1, def.op / 100));
-            if (def.id === 'base_lines') ctx.globalCompositeOperation = 'multiply';
+            // Source-over est plus fiable dans un export PDF que multiply, qui
+            // peut rendre les tuiles OpenTopoMap presque invisibles sur certains
+            // navigateurs et créer un résultat trop sombre ou transparent.
+            ctx.globalCompositeOperation = 'source-over';
             ctx.drawImage(stage, cropX, cropY, cropW, cropH, 0, 0, geometry.outputW, geometry.outputH);
             ctx.restore();
         }
@@ -745,7 +748,8 @@
                     getExportTileUrls(d, exportZoom, geometry.tileMinX, geometry.tileMinY).length, 0);
                 // Au-delà de 800 requêtes, on baisse automatiquement le zoom export.
                 // La carte garde toutes ses couches, mais évite de devenir inutilisable.
-                while ((geometry.rawW > 6000 || geometry.rawH > 6000 || geometry.rawW * geometry.rawH > 24000000 || estimateRequests() > 800) && exportZoom > 1) {
+                const requestBudget = { 1: 500, 2: 800, 3: 1000, 4: 1200 }[quality] || 800;
+                while ((geometry.rawW > 6000 || geometry.rawH > 6000 || geometry.rawW * geometry.rawH > 24000000 || estimateRequests() > requestBudget) && exportZoom > 1) {
                     exportZoom--; geometry = getExportGeometry(lastSelectionBounds, exportZoom);
                 }
                 const totalTiles = Math.max(1, estimateRequests());
@@ -772,7 +776,10 @@
                 const doc = new jsPDF({ orientation, unit: 'mm', format: paper, compress: true });
                 const xMm = (pageWmm - drawW / dpi * 25.4) / 2;
                 const yMm = (pageHmm - drawH / dpi * 25.4) / 2;
-                doc.addImage(pdfCanvas.toDataURL('image/jpeg', 0.96), 'JPEG', xMm, yMm, drawW / dpi * 25.4, drawH / dpi * 25.4, undefined, 'FAST');
+                // PNG sans perte : les courbes de niveau, textes et lignes fines
+                // restent nets dans le PDF, contrairement à un JPEG compressé.
+                const pdfImage = pdfCanvas.toDataURL('image/png');
+                doc.addImage(pdfImage, 'PNG', xMm, yMm, drawW / dpi * 25.4, drawH / dpi * 25.4);
                 doc.setFontSize(6); doc.setTextColor(100); doc.text(`${getActiveExportAttribution()} • Niveau de tuiles ${exportZoom}`, marginMm, pageHmm - 3);
                 const now = new Date().toISOString().slice(0, 10);
                 doc.save(`carte-rando-${now}.pdf`);
