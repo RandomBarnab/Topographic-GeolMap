@@ -6,7 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗺️</text></svg>">
-    <title>Carte Rando Pro V37</title>
+    <title>Carte Rando Pro V38</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
@@ -662,7 +662,7 @@
             // Les tuiles sont d'abord dessinées normalement sur leur propre canevas.
             // Le mode "multiply" de la couche topo est appliqué uniquement lors de
             // la composition sur la carte finale, comme le faisait le CSS Leaflet.
-            if (def.id === 'base_lines') sctx.filter = 'grayscale(100%) brightness(105%) contrast(170%)';
+            if (def.id === 'base_lines') sctx.filter = 'grayscale(100%) brightness(105%) contrast(150%)';
 
             const jobs = [];
             for (let y = tileMinY; y <= tileMaxY; y++) {
@@ -709,10 +709,11 @@
             sctx.filter = 'none';
             ctx.save();
             ctx.globalAlpha = Math.max(0, Math.min(1, def.op / 100));
-            // Source-over est plus fiable dans un export PDF que multiply, qui
-            // peut rendre les tuiles OpenTopoMap presque invisibles sur certains
-            // navigateurs et créer un résultat trop sombre ou transparent.
-            ctx.globalCompositeOperation = 'source-over';
+            // Reproduction du rendu Leaflet : la couche OpenTopoMap est
+            // en mode multiply dans la carte web. Les tuiles étant désormais
+            // correctement chargées au bon zoom, on peut réutiliser ce mode
+            // sans perdre les lignes noires.
+            ctx.globalCompositeOperation = def.id === 'base_lines' ? 'multiply' : 'source-over';
             ctx.drawImage(stage, cropX, cropY, cropW, cropH, 0, 0, geometry.outputW, geometry.outputH);
             ctx.restore();
         }
