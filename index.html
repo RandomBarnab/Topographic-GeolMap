@@ -429,7 +429,7 @@
             } else {
                 if(activeTool === 'ruler') toggleRuler();
                 activeTool = 'pencil'; document.getElementById('btn-pencil').style.background = '#ddd';
-                clearPencil(); setActionBar(null);
+                clearPencil(); setActionBar('✅ Valider la zone');
             }
             map._container.style.cursor = activeTool === 'pencil' ? 'crosshair' : '';
         }
@@ -511,14 +511,38 @@
             
             // On valide mais on laisse l'outil ouvert et la mémoire du Crayon active
             activeTool = null; document.getElementById('btn-pencil').style.background = 'white';
+            document.getElementById('btn-pdf').style.background = 'white';
             clearPencil(); setActionBar(null); map._container.style.cursor = '';
+            // La zone est maintenant mémorisée, on ouvre directement les options PDF.
+            document.getElementById('pdf-export-panel').style.display = 'flex';
         }
 
         // --- EXPORT PDF HAUTE RÉSOLUTION, PAR RECOMPOSITION DES TUILES ---
         const exportImageCache = {};
         const PDF_PAPER_MM = { a4: [297, 210], a3: [420, 297], a2: [594, 420] };
 
+        function startPdfSelection() {
+            const panel = document.getElementById('pdf-export-panel');
+            panel.style.display = 'none';
+            if (activeTool === 'ruler') toggleRuler();
+            if (activeTool !== 'pencil') {
+                activeTool = 'pencil';
+                clearPencil();
+            } else {
+                clearPencil();
+            }
+            document.getElementById('btn-pencil').style.background = '#ddd';
+            document.getElementById('btn-pdf').style.background = '#ff9500';
+            setActionBar('✅ Valider la zone');
+            map._container.style.cursor = 'crosshair';
+        }
+
         function togglePdfExport() {
+            // Sans zone mémorisée, le bouton PDF lance directement le mode sélection.
+            if (!lastSelectionBounds) {
+                startPdfSelection();
+                return;
+            }
             const panel = document.getElementById('pdf-export-panel');
             panel.style.display = panel.style.display === 'flex' ? 'none' : 'flex';
         }
@@ -661,8 +685,8 @@
 
         async function exportSelectedAreaToPdf() {
             if (!lastSelectionBounds) {
-                alert('Sélectionnez d’abord une zone avec le bouton ✏️, en cliquant deux coins opposés.');
-                togglePdfExport(); togglePencil(); return;
+                startPdfSelection();
+                return;
             }
             if (!window.jspdf || !window.jspdf.jsPDF) {
                 alert('La bibliothèque PDF n’est pas disponible. Vérifiez votre connexion Internet puis réessayez.'); return;
