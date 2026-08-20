@@ -6,7 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗺️</text></svg>">
-    <title>Carte Rando Pro V36</title>
+    <title>Carte Rando Pro V37</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
@@ -555,11 +555,21 @@
             el.style.display = visible ? 'block' : 'none';
         }
 
+        function expandExportTileUrl(template, z, x, y) {
+            const subdomains = ['a', 'b', 'c', 'd'];
+            const subdomain = subdomains[Math.abs(x + y) % subdomains.length];
+            return template
+                .replaceAll('{z}', String(z))
+                .replaceAll('{x}', String(x))
+                .replaceAll('{y}', String(y))
+                .replaceAll('{s}', subdomain)
+                .replaceAll('{r}', '');
+        }
+
         function getExportTileUrls(def, z, x, y) {
             const world = Math.pow(2, z);
             const wrappedX = ((x % world) + world) % world;
             if (y < 0 || y >= world) return [];
-            const coords = L.point(wrappedX, y); coords.z = z;
 
             if (def.id === 'ele') {
                 return [`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${wrappedX}/${y}.png`];
@@ -573,9 +583,23 @@
                     `https://a.basemaps.cartocdn.com/rastertiles/voyager_only_labels/${z}/${wrappedX}/${y}.png`
                 ];
             }
+
+            // Ne pas utiliser layer.getTileUrl(coords) pour les XYZ : Leaflet
+            // prend son zoom interne (_tileZoom), pas coords.z. Lorsque l’export
+            // demande un zoom différent de celui de la carte, les x/y sont alors
+            // envoyés avec le mauvais z, ce qui produit des tuiles 404 ou vides.
+            if (def.type === 'xyz' || def.type === 'topoblend') {
+                return [expandExportTileUrl(def.url, z, wrappedX, y)];
+            }
+
             const layer = layersObj[def.id];
             if (!layer || typeof layer.getTileUrl !== 'function') return [];
-            return [layer.getTileUrl(coords)];
+            const coords = L.point(wrappedX, y);
+            const previousTileZoom = layer._tileZoom;
+            layer._tileZoom = z;
+            const url = layer.getTileUrl(coords);
+            layer._tileZoom = previousTileZoom;
+            return url ? [url] : [];
         }
 
         function fetchExportImage(url) {
@@ -663,6 +687,10 @@
                             tile = paintWaterTile(img);
                         }
                         sctx.drawImage(tile, (job.x - tileMinX) * 256, (job.y - tileMinY) * 256, 256, 256);
+                    } else {
+                        progressState.failed = (progressState.failed || 0) + 1;
+                        if ((progressState.failedUrls || []).length < 5) (progressState.failedUrls || (progressState.failedUrls = [])).push(job.url);
+                        console.warn('Tuile ignorée pendant l’export PDF:', job.url);
                     }
                     progressState.done++;
                     const now = performance.now();
@@ -755,7 +783,7 @@
                     exportZoom--; geometry = getExportGeometry(lastSelectionBounds, exportZoom);
                 }
                 const totalTiles = Math.max(1, estimateRequests());
-                const progressState = { done: 0, lastUiUpdate: 0 };
+                const progressState = { done: 0, failed: 0, failedUrls: [], lastUiUpdate: 0 };
                 const mapCanvas = document.createElement('canvas'); mapCanvas.width = geometry.outputW; mapCanvas.height = geometry.outputH;
                 const mapCtx = mapCanvas.getContext('2d'); mapCtx.fillStyle = '#fff'; mapCtx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
                 for (const def of active.slice().reverse()) await drawExportLayer(mapCtx, def, geometry, exportZoom, Math.max(1, totalTiles), progressState);
@@ -785,7 +813,7 @@
                 doc.setFontSize(6); doc.setTextColor(100); doc.text(`${getActiveExportAttribution()} • Niveau de tuiles ${exportZoom}`, marginMm, pageHmm - 3);
                 const now = new Date().toISOString().slice(0, 10);
                 doc.save(`carte-rando-${now}.pdf`);
-                setPdfProgress('PDF généré.');
+                setPdfProgress(progressState.failed ? `PDF généré, ${progressState.failed} tuile(s) indisponible(s).` : 'PDF généré.');
             } catch (err) {
                 console.error(err); alert('Impossible de générer le PDF. Certaines tuiles peuvent bloquer l’export par restriction CORS.');
                 setPdfProgress('Échec de l’export.');
