@@ -99,6 +99,22 @@
         
         #hover-line { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255,0,0,0.5); display: none; pointer-events: none; }
         #hover-dot { position: absolute; width: 10px; height: 10px; background: red; border: 2px solid white; border-radius: 50%; transform: translate(-50%, -50%); display: none; pointer-events: none; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+
+        /* MODE GPS : carte agrandie puis inclinée en perspective, ciel derrière */
+        #gps-sky { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 0; display: none; background: linear-gradient(#7fb2e5 0%, #cfe2f3 40%, #e8eef3 100%); }
+        body.gps-on #gps-sky { display: block; }
+        body.gps-on #map { position: absolute !important; left: -20%; top: -10%; width: 140% !important; height: 150% !important; z-index: 1; transform-origin: 50% 50%; }
+        #gps-hud { position: absolute; top: 62px; left: 15px; z-index: 1500; display: none; width: calc(100% - 100px); max-width: 300px; box-sizing: border-box; background: rgba(255,255,255,.93); border-radius: 10px; padding: 8px 10px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+        #gps-hud .gps-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+        #gps-hud label { flex: 1; display: flex; align-items: center; gap: 6px; font-weight: 600; }
+        #gps-hud input[type="range"] { flex: 1; min-width: 0; }
+        #gps-recenter { border: none; border-radius: 8px; background: #007AFF; color: #fff; font-size: 16px; padding: 4px 10px; }
+        #gps-hud .gps-credit { margin-top: 4px; font-size: 9px; color: #777; }
+        .gps-icon { background: none; border: none; }
+        .gps-rot { position: relative; width: 28px; height: 28px; }
+        .gps-dot { position: absolute; left: 5px; top: 5px; width: 18px; height: 18px; border-radius: 50%; background: #007AFF; border: 3px solid #fff; box-shadow: 0 0 6px rgba(0,0,0,.6); box-sizing: border-box; }
+        .gps-arrow { display: none; position: absolute; left: 6px; top: -8px; width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 16px solid #007AFF; filter: drop-shadow(0 0 2px #fff); }
+        .gps-rot.has-heading .gps-arrow { display: block; }
     </style>
 </head>
 <body>
@@ -114,6 +130,15 @@
         <button class="preset-btn" onclick="applyPreset('topo')" title="Topo Only">⛰️ Topo</button>
         <button class="preset-btn" onclick="applyPreset('geol')" title="Geol Only">🪨 Géol</button>
         <button class="preset-btn" onclick="applyPreset('sat')" title="Imagerie satellite">🛰️ Sat</button>
+    </div>
+
+    <div id="gps-hud">
+        <div id="gps-info">⏳ Recherche du signal GPS…</div>
+        <div class="gps-row">
+            <label>Inclinaison <input type="range" id="gps-tilt" min="0" max="65" value="45" oninput="setGpsTilt(this.value)"></label>
+            <button id="gps-recenter" onclick="gpsRecenter()" title="Recentrer sur ma position">🎯</button>
+        </div>
+        <div class="gps-credit">© OpenStreetMap · OpenTopoMap-R · IGN · Esri</div>
     </div>
 
     <div id="tool-actions">
@@ -144,6 +169,7 @@
         </div>
     </div>
 
+    <div id="gps-sky"></div>
     <div id="map"></div>
     <div class="legend-box" id="legend">0m<div class="color-bar" style="background: linear-gradient(to top, green, yellow, brown)"></div>0m</div>
 
@@ -211,6 +237,7 @@
         <div class="custom-control" id="btn-pdf" onclick="togglePdfExport()" title="Exporter la zone sélectionnée en PDF">📄</div>
         <div class="custom-control" onclick="toggleFullScreen()" title="Plein Écran">⛶</div>
         <div class="custom-control" onclick="toggleSettings()" title="Réglages">⚙️</div>
+        <div class="custom-control" id="btn-gps" onclick="toggleGpsMode()" title="Mode GPS (vue inclinée, suivi en direct)">🧭</div>
         <div class="custom-control" id="btn-locate" onclick="locateUser()" title="Me localiser">📍</div>
     </div>
 
@@ -574,6 +601,7 @@
         }
 
         function togglePencil() {
+            if (gpsMode) return;
             if(activeTool === 'pencil') {
                 activeTool = null; document.getElementById('btn-pencil').style.background = 'white';
                 clearPencil(); setActionBar(null);
@@ -591,6 +619,7 @@
         }
 
         function toggleRuler() {
+            if (gpsMode) return;
             if(activeTool === 'ruler') {
                 activeTool = null; document.getElementById('btn-ruler').style.background = 'white';
                 if(rulerLine && document.getElementById('profile-panel').style.display !== 'flex') { map.removeLayer(rulerLine); rulerLine = null; }
@@ -686,6 +715,7 @@
         }
 
         function startPdfSelection() {
+            if (gpsMode) return;
             const panel = document.getElementById('pdf-export-panel');
             panel.style.display = 'none';
             if (activeTool === 'ruler') toggleRuler();
@@ -1274,7 +1304,7 @@
 
         // --- AUTRES COMPOSANTS ---
         map.on('dblclick', async function(e) {
-            if (activeTool) return;
+            if (activeTool || gpsMode) return;
             const geoWorldActive = layerDefs.find(l => l.id === 'geo_w' && l.active); const geoFrActive = layerDefs.find(l => l.id === 'geo_fr' && l.active);
             let popupHtml = `<div class="geo-popup">`;
             if (geoWorldActive) {
@@ -1334,6 +1364,124 @@
                 if(latlngs.length > 0) { if(gpxLayer) map.removeLayer(gpxLayer); map.createPane('pane_gpx'); map.getPane('pane_gpx').style.zIndex = 400; gpxLayer = L.polyline(latlngs, {color: 'red', weight: 4, pane: 'pane_gpx'}).addTo(map); map.fitBounds(gpxLayer.getBounds()); toggleSettings(); }
             }; reader.readAsText(file);
         }
+
+        // --- 6. MODE GPS : vue inclinée + suivi de la position en continu ---
+        const GPS_FOLLOW_MS = 3000;   // la carte se recentre au plus toutes les 3 s (le point, lui, bouge à chaque position reçue)
+        const GPS_STALE_MS = 15000;   // sans nouvelle position pendant 15 s, on relance le suivi (Safari le fait décrocher parfois)
+        let gpsMode = false, gpsWatchId = null, gpsMarker = null, gpsAcc = null, gpsFollow = true, gpsLast = null;
+        let gpsLastFollow = 0, gpsCentered = false, gpsTimer = null, gpsWake = null, gpsDenied = false, gpsRestartAt = 0;
+
+        function setGpsTilt(deg) {
+            deg = Number(deg) || 0;
+            const el = map.getContainer();
+            el.style.transform = deg > 0 ? `perspective(900px) rotateX(${deg}deg)` : '';
+            // fondu vers l'horizon : le bord lointain de la carte se dissout dans le ciel
+            const m = deg > 0 ? 'linear-gradient(to bottom, transparent 0%, #000 16%)' : '';
+            el.style.webkitMaskImage = m; el.style.maskImage = m;
+        }
+
+        function gpsRenderInfo() {
+            const info = document.getElementById('gps-info');
+            if (!gpsLast) return;
+            const c = gpsLast.c, age = Math.max(0, Math.round((Date.now() - gpsLast.t) / 1000));
+            const alt = typeof c.altitude === 'number' ? Math.round(c.altitude) + ' m' : '–';
+            const spd = typeof c.speed === 'number' && c.speed >= 0 ? (c.speed * 3.6).toFixed(1) + ' km/h' : '–';
+            info.innerHTML = `<b>±${Math.round(c.accuracy)} m</b> · alt ${alt} · ${spd} · <span style="color:${age > 8 ? '#d00' : '#080'}">il y a ${age} s</span>`;
+        }
+
+        function gpsStartWatch() {
+            if (gpsWatchId !== null) navigator.geolocation.clearWatch(gpsWatchId);
+            // maximumAge: 0 = jamais de position mise en cache (c'est ce qui figeait le point avec le bouton 📍)
+            gpsWatchId = navigator.geolocation.watchPosition(onGpsFix, onGpsError, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+        }
+
+        function onGpsError(err) {
+            const info = document.getElementById('gps-info');
+            if (err.code === 1) {
+                gpsDenied = true;
+                if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
+                info.textContent = '⚠️ Localisation refusée : Réglages > Confidentialité > Service de localisation > Safari';
+            } else if (!gpsLast) info.textContent = '⏳ Recherche du signal GPS…';
+        }
+
+        function onGpsFix(pos) {
+            if (!gpsMode) return;
+            const c = pos.coords, ll = L.latLng(c.latitude, c.longitude), now = Date.now();
+            gpsLast = { ll, t: now, c };
+            if (!gpsMarker) {
+                gpsMarker = L.marker(ll, { icon: L.divIcon({ className: 'gps-icon', html: '<div class="gps-rot" id="gps-rot"><div class="gps-arrow"></div><div class="gps-dot"></div></div>', iconSize: [28, 28], iconAnchor: [14, 14] }), interactive: false, keyboard: false, zIndexOffset: 1000 }).addTo(map);
+                gpsAcc = L.circle(ll, { radius: c.accuracy || 20, color: '#007AFF', weight: 1, fillColor: '#007AFF', fillOpacity: 0.12, interactive: false }).addTo(map);
+            } else { gpsMarker.setLatLng(ll); gpsAcc.setLatLng(ll); gpsAcc.setRadius(c.accuracy || 20); }
+            const rot = document.getElementById('gps-rot');
+            if (rot) {
+                const hasH = typeof c.heading === 'number' && !isNaN(c.heading) && (c.speed || 0) > 0.5;
+                rot.classList.toggle('has-heading', hasH);
+                if (hasH) rot.style.transform = `rotate(${c.heading}deg)`;
+            }
+            if (gpsFollow && (!gpsCentered || now - gpsLastFollow >= GPS_FOLLOW_MS)) {
+                gpsLastFollow = now;
+                if (!gpsCentered) { gpsCentered = true; map.setView(ll, Math.max(map.getZoom(), 15), { animate: false }); }
+                else map.panTo(ll, { animate: true, duration: 0.8, easeLinearity: 1, noMoveStart: true });
+            }
+            gpsRenderInfo();
+        }
+
+        function gpsTick() {
+            if (!gpsMode) return;
+            gpsRenderInfo();
+            const now = Date.now();
+            if (gpsLast && !gpsDenied && now - gpsLast.t > GPS_STALE_MS && now - gpsRestartAt > GPS_STALE_MS) { gpsRestartAt = now; gpsStartWatch(); }
+        }
+
+        function gpsRecenter() {
+            gpsFollow = true; gpsLastFollow = 0;
+            document.getElementById('gps-recenter').style.background = '#007AFF';
+            if (gpsLast) { gpsLastFollow = Date.now(); map.panTo(gpsLast.ll, { animate: true, duration: 0.5 }); }
+        }
+        map.on('dragstart', () => { if (gpsMode && gpsFollow) { gpsFollow = false; document.getElementById('gps-recenter').style.background = '#8e8e93'; } });
+
+        // Écran maintenu allumé (Safari coupe le GPS quand l'écran se verrouille)
+        async function gpsRequestWake() {
+            try { if ('wakeLock' in navigator && !gpsWake) { gpsWake = await navigator.wakeLock.request('screen'); gpsWake.addEventListener('release', () => { gpsWake = null; }); } } catch (e) {}
+        }
+        document.addEventListener('visibilitychange', () => { if (gpsMode && document.visibilityState === 'visible') { gpsRequestWake(); if (!gpsDenied) gpsStartWatch(); } });
+
+        function startGps() {
+            if (!navigator.geolocation) { alert('Géolocalisation indisponible sur cet appareil.'); return; }
+            if (activeTool === 'ruler') toggleRuler();
+            if (activeTool === 'pencil') togglePencil();
+            closeProfile();
+            gpsMode = true; gpsFollow = true; gpsLast = null; gpsCentered = false; gpsLastFollow = 0; gpsDenied = false;
+            document.body.classList.add('gps-on');
+            document.getElementById('btn-gps').style.background = '#34c759';
+            document.getElementById('gps-hud').style.display = 'block';
+            document.getElementById('gps-info').textContent = '⏳ Recherche du signal GPS…';
+            document.getElementById('gps-recenter').style.background = '#007AFF';
+            map.doubleClickZoom.disable(); map.options.touchZoom = 'center'; // le zoom à deux doigts se fait autour du centre (les coordonnées tactiles sont faussées par l'inclinaison)
+            const c = map.getCenter();
+            setGpsTilt(document.getElementById('gps-tilt').value);
+            map.invalidateSize({ animate: false, pan: false }); map.setView(c, map.getZoom(), { animate: false });
+            if (uMarker) { map.removeLayer(uMarker); uMarker = null; }
+            gpsStartWatch(); gpsRequestWake();
+            gpsTimer = setInterval(gpsTick, 1000);
+        }
+
+        function stopGps() {
+            gpsMode = false;
+            if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
+            clearInterval(gpsTimer); gpsTimer = null;
+            if (gpsMarker) { map.removeLayer(gpsMarker); gpsMarker = null; }
+            if (gpsAcc) { map.removeLayer(gpsAcc); gpsAcc = null; }
+            try { if (gpsWake) gpsWake.release(); } catch (e) {} gpsWake = null;
+            document.body.classList.remove('gps-on');
+            document.getElementById('btn-gps').style.background = 'white';
+            document.getElementById('gps-hud').style.display = 'none';
+            const el = map.getContainer(); el.style.transform = ''; el.style.webkitMaskImage = ''; el.style.maskImage = '';
+            map.doubleClickZoom.enable(); map.options.touchZoom = true;
+            const c = map.getCenter();
+            map.invalidateSize({ animate: false, pan: false }); map.setView(c, map.getZoom(), { animate: false });
+        }
+        function toggleGpsMode() { if (gpsMode) stopGps(); else startGps(); }
 
         loadSettings(); if (AUTO_LOCATE_ON_START || !hasSavedView) locateUser();
     </script>
