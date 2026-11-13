@@ -110,6 +110,10 @@
         #gps-hud input[type="range"] { flex: 1; min-width: 0; }
         #gps-recenter { border: none; border-radius: 8px; background: #007AFF; color: #fff; font-size: 16px; padding: 4px 10px; }
         #gps-compass { border: none; border-radius: 8px; background: #34c759; color: #fff; font-size: 12px; font-weight: 600; padding: 6px 10px; }
+        .gps-calib { margin-top: 6px; border-top: 1px solid #ddd; padding-top: 6px; }
+        .gps-calib summary { font-weight: 600; cursor: pointer; }
+        .gps-calib button { flex: 1; border: none; border-radius: 8px; background: #e5e5ea; color: #000; padding: 6px 8px; font-size: 12px; }
+        .gps-check { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 11px; }
         #gps-hud .gps-credit { margin-top: 4px; font-size: 9px; color: #777; }
         .gps-icon { background: none; border: none; }
         .gps-rot { position: relative; width: 28px; height: 28px; }
@@ -143,6 +147,12 @@
             <button id="gps-compass" onclick="toggleCompassMode()">🧭 Nord en haut</button>
             <span id="gps-compass-msg" style="font-size:10px;color:#555;flex:1"></span>
         </div>
+        <details class="gps-calib">
+            <summary>🔧 Calibrer la boussole</summary>
+            <div class="gps-row"><label>Correction <input type="range" id="gps-offset" min="-180" max="180" value="0" oninput="setCompassOffset(this.value)"><b id="gps-offset-val" style="min-width:38px;text-align:right">0°</b></label></div>
+            <div class="gps-row"><button onclick="calibrateCompassOnGps()">Caler sur le GPS</button><button onclick="setCompassOffset(0)">Remettre à 0°</button></div>
+            <label class="gps-check"><input type="checkbox" id="gps-use-gpsh" checked> Cap GPS dès 11 km/h (train, voiture)</label>
+        </details>
         <div class="gps-credit">© OpenStreetMap · OpenTopoMap-R · IGN · Esri</div>
     </div>
 
@@ -1377,6 +1387,8 @@
         let gpsLastFollow = 0, gpsCentered = false, gpsTimer = null, gpsWake = null, gpsDenied = false, gpsRestartAt = 0;
 
         // Inclinaison (rotateX) + rotation selon le cap (rotateZ, mode « Cap en haut »), appliquées ensemble au conteneur de la carte
+        let compassOffset = 0, gpsHsm = null, gpsHraw = null;
+        const GPS_HEADING_MIN_SPEED = 3;   // m/s (≈ 11 km/h) : au-dessus, le cap du GPS est plus fiable qu'une boussole
         let gpsTilt = 45, gpsRotation = 0, compassMode = 'north', compassH = null, compassOn = false, compassAcc = null, compassLastUi = 0;
         const angleDiff = (a, b) => ((a - b + 540) % 360) - 180;
 
@@ -1389,12 +1401,28 @@
         }
         function setGpsTilt(deg) { gpsTilt = Number(deg) || 0; applyGpsTransform(); }
 
-        // Cap utilisé : boussole si disponible, sinon cap GPS (seulement quand on se déplace)
+        // Cap utilisé : GPS si on roule vite (ignore les perturbations magnétiques du train), sinon boussole + correction manuelle
         function currentHeading() {
-            if (compassH !== null) return compassH;
-            const c = gpsLast && gpsLast.c;
-            if (c && typeof c.heading === 'number' && !isNaN(c.heading) && (c.speed || 0) > 1) return c.heading;
+            const c = gpsLast && gpsLast.c, v = (c && typeof c.speed === 'number') ? c.speed : 0;
+            const useGps = document.getElementById('gps-use-gpsh').checked;
+            if (useGps && gpsHsm !== null && v >= GPS_HEADING_MIN_SPEED) return gpsHsm;
+            if (compassH !== null) return (compassH + compassOffset + 360) % 360;
+            if (gpsHsm !== null && v > 1) return gpsHsm;
             return null;
+        }
+        function setCompassOffset(v) {
+            compassOffset = Math.max(-180, Math.min(180, Math.round(Number(v) || 0)));
+            document.getElementById('gps-offset').value = compassOffset;
+            document.getElementById('gps-offset-val').textContent = compassOffset + '°';
+            updateHeadingUI(true);
+        }
+        // Cale la boussole sur le cap GPS : à faire en se déplaçant en ligne droite (train sur une portion rectiligne, marche…)
+        function calibrateCompassOnGps() {
+            const c = gpsLast && gpsLast.c;
+            if (compassH === null) { compassMsg('Boussole inactive : rien à caler'); return; }
+            if (gpsHraw === null || !c || (c.speed || 0) < 1) { compassMsg('Déplace-toi (> 4 km/h) en ligne droite, puis réessaie'); return; }
+            setCompassOffset(angleDiff(gpsHraw, compassH));
+            compassMsg('Calé sur le GPS (' + compassOffset + '°)');
         }
         function updateHeadingUI(force) {
             const h = currentHeading(), rot = document.getElementById('gps-rot');
@@ -1472,6 +1500,10 @@
                 gpsMarker = L.marker(ll, { icon: L.divIcon({ className: 'gps-icon', html: '<div class="gps-rot" id="gps-rot"><div class="gps-arrow"></div><div class="gps-dot"></div></div>', iconSize: [28, 28], iconAnchor: [14, 14] }), interactive: false, keyboard: false, zIndexOffset: 1000 }).addTo(map);
                 gpsAcc = L.circle(ll, { radius: c.accuracy || 20, color: '#007AFF', weight: 1, fillColor: '#007AFF', fillOpacity: 0.12, interactive: false }).addTo(map);
             } else { gpsMarker.setLatLng(ll); gpsAcc.setLatLng(ll); gpsAcc.setRadius(c.accuracy || 20); }
+            if (typeof c.heading === 'number' && !isNaN(c.heading) && (c.speed || 0) >= 1) {
+                gpsHraw = c.heading;
+                gpsHsm = gpsHsm === null ? gpsHraw : (((gpsHsm + angleDiff(gpsHraw, gpsHsm) * 0.5) % 360) + 360) % 360;
+            } else { gpsHraw = null; gpsHsm = null; }
             updateHeadingUI(true);
             if (gpsFollow && (!gpsCentered || now - gpsLastFollow >= GPS_FOLLOW_MS)) {
                 gpsLastFollow = now;
@@ -1507,7 +1539,7 @@
             if (activeTool === 'ruler') toggleRuler();
             if (activeTool === 'pencil') togglePencil();
             closeProfile();
-            gpsMode = true; gpsRotation = 0; setCompassBtn(); if (compassMode === 'heading') map.dragging.disable(); gpsFollow = true; gpsLast = null; gpsCentered = false; gpsLastFollow = 0; gpsDenied = false;
+            gpsMode = true; gpsRotation = 0; gpsHsm = null; gpsHraw = null; setCompassBtn(); if (compassMode === 'heading') map.dragging.disable(); gpsFollow = true; gpsLast = null; gpsCentered = false; gpsLastFollow = 0; gpsDenied = false;
             document.body.classList.add('gps-on');
             document.getElementById('btn-gps').style.background = '#34c759';
             document.getElementById('gps-hud').style.display = 'block';
