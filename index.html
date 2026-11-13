@@ -3,15 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="referrer" content="origin">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗺️</text></svg>">
-    <title>Carte Rando Pro V38</title>
+    <title>Carte Rando Pro V39</title>
     
+    <!-- Connexions ouvertes en avance : gain de quelques centaines de ms au démarrage, surtout en 4G -->
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
+    <link rel="preconnect" href="https://tile.openmaps.fr" crossorigin>
+    <link rel="preconnect" href="https://s3.amazonaws.com" crossorigin>
+    <link rel="preconnect" href="https://tile.openstreetmap.org" crossorigin>
+    <link rel="dns-prefetch" href="https://tiles.macrostrat.org">
+    <link rel="dns-prefetch" href="https://server.arcgisonline.com">
+    <link rel="dns-prefetch" href="https://data.geopf.fr">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
     <style>
-        body, html { margin: 0; padding: 0; width: 100vw; height: 100dvh; overflow: hidden; font-family: -apple-system, sans-serif; background-color: #333; }
+        body, html { margin: 0; padding: 0; width: 100vw; height: 100dvh; overflow: hidden; font-family: -apple-system, sans-serif; background-color: #333; -webkit-tap-highlight-color: transparent; overscroll-behavior: none; }
         #map { width: 100%; height: 100%; cursor: crosshair; }
 
         #search-container { position: absolute; top: 15px; left: 15px; z-index: 1000; display: flex; gap: 5px; width: calc(100% - 100px); max-width: 300px; }
@@ -29,7 +38,7 @@
         .color-bar { height: 100px; width: 20px; margin: 5px auto; border: 1px solid #999; border-radius: 3px; }
         .unlock-btn { pointer-events: auto; cursor: pointer; display: inline-block; margin-left: 3px; font-size: 14px; background: rgba(255,0,0,0.1); border-radius: 4px; padding: 2px; }
 
-        #settings-panel { position: absolute; top: 60px; right: 65px; width: 320px; max-height: 80vh; overflow-y: auto; background: rgba(255, 255, 255, 0.95); padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.4); z-index: 1001; display: none; flex-direction: column; gap: 15px; backdrop-filter: blur(5px); }
+        #settings-panel { position: absolute; top: 60px; right: 65px; width: 320px; max-height: 80vh; overflow-y: auto; background: rgba(255, 255, 255, 0.95); padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.4); z-index: 1001; display: none; flex-direction: column; gap: 15px; }
         h3 { margin: 0; font-size: 16px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
         .setting-group { font-size: 13px; background: rgba(0,0,0,0.05); padding: 8px; border-radius: 8px; }
         .setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
@@ -56,7 +65,7 @@
         #tool-actions .action-btn { padding: 12px 24px; font-size: 15px; border-radius: 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); text-transform: uppercase; letter-spacing: 0.5px; background: #34c759;}
 
         /* EXPORT PDF HAUTE RÉSOLUTION */
-        #pdf-export-panel { position: absolute; right: 65px; bottom: 25px; z-index: 2001; width: min(360px, calc(100vw - 90px)); display: none; flex-direction: column; gap: 12px; background: rgba(255,255,255,.97); padding: 15px; border-radius: 12px; box-shadow: 0 4px 18px rgba(0,0,0,.45); backdrop-filter: blur(5px); }
+        #pdf-export-panel { position: absolute; right: 65px; bottom: 25px; z-index: 2001; width: min(360px, calc(100vw - 90px)); display: none; flex-direction: column; gap: 12px; background: rgba(255,255,255,.97); padding: 15px; border-radius: 12px; box-shadow: 0 4px 18px rgba(0,0,0,.45); }
         #pdf-export-panel h3 { padding-right: 22px; }
         .pdf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .pdf-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; }
@@ -72,7 +81,7 @@
         #profile-panel {
             position: absolute; top: 10vh; left: 10vw; width: 80vw; height: 45vh; min-height: 250px; min-width: 320px;
             background: rgba(255, 255, 255, 0.95); border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-            z-index: 2000; display: none; flex-direction: column; backdrop-filter: blur(5px);
+            z-index: 2000; display: none; flex-direction: column;
             resize: both; overflow: hidden; border: 1px solid #ccc;
         }
         #profile-panel::after {
@@ -104,6 +113,7 @@
         <button class="preset-btn" onclick="applyPreset('default')" title="Défaut">🌍 Défaut</button>
         <button class="preset-btn" onclick="applyPreset('topo')" title="Topo Only">⛰️ Topo</button>
         <button class="preset-btn" onclick="applyPreset('geol')" title="Geol Only">🪨 Géol</button>
+        <button class="preset-btn" onclick="applyPreset('sat')" title="Imagerie satellite">🛰️ Sat</button>
     </div>
 
     <div id="tool-actions">
@@ -177,7 +187,7 @@
 
     <div id="settings-panel">
         <div class="close-btn" style="position: absolute; top:15px;" onclick="toggleSettings()">✖</div>
-        <h3>Réglages V33</h3>
+        <h3>Réglages V39</h3>
         <div class="setting-group">
             <b>Couleurs Altimétriques</b>
             <div class="setting-row"><span>Bas (Creux)</span> <input type="color" id="col-low"></div>
@@ -205,23 +215,40 @@
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script>
         // --- 1. CONFIGURATION DES COUCHES ---
+        const IS_MOBILE = !!L.Browser.mobile || (navigator.maxTouchPoints || 0) > 1;
+        const URL_IGN_ORTHO = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}';
+        const URL_ESRI_SAT = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+
+        // maxNative : zoom max réellement servi par le serveur (au-delà, Leaflet agrandit la tuile au lieu de demander un 404)
+        // sampleMax : zoom max utilisé pour lire la couleur sous le tracé de la règle
         let layerDefs = [
             { id: 'top', name: 'Noms & Sentiers (GR)', type: 'group', op: 100, active: false },
-            { id: 'base_lines', name: 'Lignes Topo CSS (On Top)', type: 'topoblend', url: 'https://tile.openmaps.fr/opentopomap/{z}/{x}/{y}.png', op: 70, active: true },
-            { id: 'water', name: 'Eau du Monde', type: 'water_canvas', url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png', op: 100, active: true },
-            { id: 'ele', name: 'Relief Dynamique', type: 'custom', op: 70, active: true },
-            { id: 'geo_w', name: 'Géologie (Monde)', type: 'xyz', url: 'https://tiles.macrostrat.org/carto/{z}/{x}/{y}.png', op: 80, active: true },
-            { id: 'geo_fr', name: 'Géologie (France BRGM)', type: 'wms', url: 'https://geoservices.brgm.fr/geologie', wmsLayer: 'GEOLOGIE', op: 60, active: false },
-            { id: 'base_full', name: 'Complete Open Topo (Fond)', type: 'xyz', url: 'https://tile.openmaps.fr/opentopomap/{z}/{x}/{y}.png', op: 100, active: false }
+            { id: 'base_lines', name: 'Lignes Topo (On Top)', type: 'topoblend', url: 'https://tile.openmaps.fr/opentopomap/{z}/{x}/{y}.png', op: 70, active: true, maxNative: 17 },
+            { id: 'water', name: 'Eau du Monde', type: 'water_canvas', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', op: 100, active: true, maxNative: 14 },
+            { id: 'ele', name: 'Relief Dynamique', type: 'custom', op: 70, active: true, maxNative: 13 },
+            { id: 'geo_w', name: 'Géologie (Monde)', type: 'xyz', url: 'https://tiles.macrostrat.org/carto/{z}/{x}/{y}.png', op: 80, active: true, sampleMax: 12 },
+            { id: 'geo_fr', name: 'Géologie (France BRGM)', type: 'wms', url: 'https://geoservices.brgm.fr/geologie', wmsLayer: 'GEOLOGIE', op: 60, active: false, sampleMax: 15 },
+            { id: 'base_full', name: 'Complete Open Topo (Fond)', type: 'xyz', url: 'https://tile.openmaps.fr/opentopomap/{z}/{x}/{y}.png', op: 100, active: false, maxNative: 17 },
+            { id: 'sat_fr', name: '🛰️ Satellite France (IGN)', type: 'xyz', url: URL_IGN_ORTHO, op: 100, active: false, maxNative: 18, sat: true, attribution: '© IGN – Géoplateforme' },
+            { id: 'sat', name: '🛰️ Satellite Monde (Esri)', type: 'xyz', url: URL_ESRI_SAT, op: 100, active: false, maxNative: 17, sat: true, attribution: 'Imagery © Esri, Maxar, Earthstar Geographics' }
         ];
 
         let layersObj = {};
         let colors = { low: [60,176,67], mid: [255,235,59], high: [139,69,19] };
 
-        const map = L.map('map', { zoomControl: false, doubleClickZoom: true }).setView([45.92, 6.86], 10);
+        // Dernière vue mémorisée : on évite de charger deux fois toutes les tuiles (position par défaut, puis GPS)
+        const savedView = (() => { try { return JSON.parse(localStorage.getItem('mapRandoView')); } catch (e) { return null; } })();
+        const hasSavedView = !!(savedView && isFinite(savedView.lat) && isFinite(savedView.lng) && isFinite(savedView.z));
+        const AUTO_LOCATE_ON_START = false; // true = toujours se centrer sur ma position au lancement
+        const map = L.map('map', { zoomControl: false, doubleClickZoom: true, fadeAnimation: !IS_MOBILE })
+            .setView(hasSavedView ? [savedView.lat, savedView.lng] : [45.92, 6.86], hasSavedView ? savedView.z : 10);
+        let viewTimer;
+        map.on('moveend', () => {
+            clearTimeout(viewTimer);
+            viewTimer = setTimeout(() => { const c = map.getCenter(); try { localStorage.setItem('mapRandoView', JSON.stringify({ lat: c.lat, lng: c.lng, z: map.getZoom() })); } catch (e) {} }, 600);
+        });
         L.control.zoom({ position: 'bottomleft' }).addTo(map);
         L.control.scale({ position: 'bottomleft', imperial: false }).addTo(map);
         L.control.attribution({ prefix: false, position: 'topright' }).addTo(map)
@@ -229,26 +256,73 @@
 
         window.addEventListener('resize', () => map.invalidateSize());
 
-        // --- CACHE DE TUILES SÉCURISÉ (TIMEOUT INCLUS POUR NE JAMAIS BLOQUER) ---
-        const globalTileCache = {};
-        function fetchRawTileData(url) {
-            if(globalTileCache[url]) return globalTileCache[url];
-            let promise = new Promise((resolve) => {
-                let img = new Image(); img.crossOrigin = "Anonymous";
-                let tOut = setTimeout(() => { img.src = ""; resolve(null); }, 4000); // 4s timeout max
-                img.onload = () => {
-                    clearTimeout(tOut);
-                    try {
-                        let canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 256;
-                        let ctx = canvas.getContext('2d', {willReadFrequently: true}); 
-                        ctx.drawImage(img, 0, 0, 256, 256); // Force Resize 256 pour alignement
-                        resolve(ctx.getImageData(0,0,256,256));
-                    } catch(e) { resolve(null); }
-                };
-                img.onerror = () => { clearTimeout(tOut); resolve(null); }; 
+        // --- CACHE DE TUILES, FILE D'ATTENTE ET OUTILS PIXELS ---
+        const LITTLE_ENDIAN = new Uint8Array(new Uint32Array([1]).buffer)[0] === 1;
+        const packRGBA = LITTLE_ENDIAN
+            ? (r, g, b, a) => ((a << 24) | (b << 16) | (g << 8) | r) >>> 0
+            : (r, g, b, a) => ((r << 24) | (g << 16) | (b << 8) | a) >>> 0;
+
+        // Un seul canevas de travail réutilisé : iOS plafonne la mémoire canvas totale
+        const scratchCanvas = document.createElement('canvas'); scratchCanvas.width = 256; scratchCanvas.height = 256;
+        const scratchCtx = scratchCanvas.getContext('2d', { willReadFrequently: true });
+        const scratchImage = new ImageData(256, 256);
+        const scratch32 = new Uint32Array(scratchImage.data.buffer);
+
+        // File d'attente : les tuiles demandées en dernier (= celles visibles maintenant) partent en premier,
+        // et celles qui ont déjà quitté l'écran ne sont jamais téléchargées.
+        const CANCELLED = { cancelled: true };
+        const NEVER = () => false;
+        const MAX_PARALLEL = IS_MOBILE ? 8 : 12;
+        const netQueue = []; let netRunning = 0;
+
+        function loadImage(url, timeout) {
+            return new Promise(resolve => {
+                const img = new Image(); img.crossOrigin = 'anonymous'; img.decoding = 'async';
+                const t = setTimeout(() => { img.onload = img.onerror = null; img.src = ''; resolve(null); }, timeout);
+                img.onload = () => { clearTimeout(t); resolve(img); };
+                img.onerror = () => { clearTimeout(t); resolve(null); };
                 img.src = url;
             });
-            globalTileCache[url] = promise; return promise;
+        }
+        function netPump() {
+            while (netRunning < MAX_PARALLEL && netQueue.length) {
+                const job = netQueue.pop();
+                job.started = true;
+                if (job.checks.every(fn => fn())) { job.finish(CANCELLED); continue; }
+                netRunning++;
+                loadImage(job.url, 8000).then(img => { netRunning--; job.finish(img); netPump(); });
+            }
+        }
+        function queueImage(url, isCancelled) {
+            const job = { url, started: false, checks: [isCancelled || NEVER], finish: null, promise: null };
+            job.promise = new Promise(res => { job.finish = res; });
+            netQueue.push(job); netPump();
+            return job;
+        }
+
+        // Cache LRU de pixels bruts (relief, eau, géologie lue sous la règle) : borné pour ne pas faire planter Safari
+        const TILE_CACHE_MAX = IS_MOBILE ? 80 : 200;
+        const tileCache = new Map();
+        function fetchRawTileData(url, isCancelled) {
+            const hit = tileCache.get(url);
+            if (hit) {
+                tileCache.delete(url); tileCache.set(url, hit);
+                if (!hit.job.started) hit.job.checks.push(isCancelled || NEVER);
+                return hit.promise;
+            }
+            const job = queueImage(url, isCancelled);
+            const entry = { job };
+            entry.promise = job.promise.then(img => {
+                let data = null;
+                if (img && img !== CANCELLED) {
+                    try { scratchCtx.clearRect(0, 0, 256, 256); scratchCtx.drawImage(img, 0, 0, 256, 256); data = scratchCtx.getImageData(0, 0, 256, 256); } catch (e) {}
+                }
+                if (!data && tileCache.get(url) === entry) tileCache.delete(url); // un échec n'est jamais mémorisé : on réessaiera
+                return data;
+            });
+            tileCache.set(url, entry);
+            if (tileCache.size > TILE_CACHE_MAX) tileCache.delete(tileCache.keys().next().value);
+            return entry.promise;
         }
 
         async function getElevationAt(lat, lng) {
@@ -262,75 +336,97 @@
         }
 
         // --- 2. MOTEUR D'ALTITUDE DYNAMIQUE ---
+        // Les couleurs sont précalculées dans une palette (LUT) : un pixel = 1 lecture + 1 écriture, sans calcul de couleur.
+        const LUT_SIZE = 1024;
         L.DynamicElevationLayer = L.GridLayer.extend({
+            initialize: function (options) {
+                L.GridLayer.prototype.initialize.call(this, options);
+                this._lut = new Uint32Array(LUT_SIZE); this._buildLut();
+                this.on('tileunload', e => { e.tile._dead = true; });
+            },
             createTile: function (coords, done) {
-                var tile = L.DomUtil.create('canvas', 'leaflet-tile'); tile.width = 256; tile.height = 256; 
-                fetchRawTileData(`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${coords.z}/${coords.x}/${coords.y}.png`).then(imgData => {
+                const tile = L.DomUtil.create('canvas', 'leaflet-tile'); tile.width = 256; tile.height = 256;
+                fetchRawTileData(`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${coords.z}/${coords.x}/${coords.y}.png`, () => tile._dead).then(imgData => {
                     try {
-                        if(imgData) {
-                            var data = imgData.data; var elevations = new Float32Array(65536);
-                            for (var i = 0; i < data.length; i += 4) { elevations[i>>2] = (data[i]*256 + data[i+1] + data[i+2]/256) - 32768; }
-                            tile.elevations = elevations; this._drawTile(tile); this._queueUpdate(); 
+                        if (imgData && !tile._dead) {
+                            const d = imgData.data, el = new Float32Array(65536);
+                            for (let i = 0, j = 0; i < 65536; i++, j += 4) el[i] = (d[j] * 256 + d[j + 1] + d[j + 2] / 256) - 32768;
+                            tile.elevations = el; this._drawTile(tile); this._queueUpdate();
                         }
                     } catch(e) {}
                     done(null, tile);
                 }).catch(() => done(null, tile));
                 return tile;
             },
-            onAdd: function(map) { L.GridLayer.prototype.onAdd.call(this, map); map.on('moveend', this._updateMinMax, this); },
-            onRemove: function(map) { map.off('moveend', this._updateMinMax, this); L.GridLayer.prototype.onRemove.call(this, map); },
+            onAdd: function(map) { L.GridLayer.prototype.onAdd.call(this, map); map.on('moveend', this._onMoveEnd, this); },
+            onRemove: function(map) { map.off('moveend', this._onMoveEnd, this); L.GridLayer.prototype.onRemove.call(this, map); },
             _currentMin: 0, _currentMax: 1000, _lockedMin: null, _lockedMax: null,
-            _queueUpdate: function() { if(this._updateTimeout) clearTimeout(this._updateTimeout); this._updateTimeout = setTimeout(() => { this._updateMinMax(); }, 50); },
-            _updateMinMax: function() {
-                let min = Infinity; let max = -Infinity; let hasData = false;
-                if (this._lockedMin !== null && this._lockedMax !== null) { min = this._lockedMin; max = this._lockedMax; hasData = true; } else {
-                    for (let key in this._tiles) {
-                        if (this._tiles[key].el.elevations) {
-                            hasData = true;
-                            for (let i = 0; i < this._tiles[key].el.elevations.length; i+=64) {
-                                let el = this._tiles[key].el.elevations[i];
-                                if (el > -500 && el < 8850) { if (el < min) min = el; if (el > max) max = el; }
-                            }
+            _onMoveEnd: function() { this._updateMinMax(false); },
+            _queueUpdate: function() { if(this._updateTimeout) clearTimeout(this._updateTimeout); this._updateTimeout = setTimeout(() => { this._updateMinMax(false); }, 80); },
+            _buildLut: function() {
+                const min = this._currentMin, cL = colors.low, cM = colors.mid, cH = colors.high;
+                const frost = min > 2000 ? Math.min((min - 2000) / 6000, 0.25) : 0;
+                for (let k = 0; k < LUT_SIZE; k++) {
+                    const t = k / (LUT_SIZE - 1); let r, g, b;
+                    if (t < 0.5) { const q = t * 2; r = cL[0] + (cM[0] - cL[0]) * q; g = cL[1] + (cM[1] - cL[1]) * q; b = cL[2] + (cM[2] - cL[2]) * q; }
+                    else { const q = (t - 0.5) * 2; r = cM[0] + (cH[0] - cM[0]) * q; g = cM[1] + (cH[1] - cM[1]) * q; b = cM[2] + (cH[2] - cM[2]) * q; }
+                    if (frost) { r += (255 - r) * frost; g += (255 - g) * frost; b += (255 - b) * frost; }
+                    const br = 0.5 + t * 0.7;
+                    this._lut[k] = packRGBA(Math.min(255, Math.round(r * br)), Math.min(255, Math.round(g * br)), Math.min(255, Math.round(b * br)), 255);
+                }
+            },
+            // force = true : on redessine même si min/max n'ont pas bougé (changement de couleurs, verrouillage de l'échelle)
+            _updateMinMax: function(force) {
+                let min = Infinity, max = -Infinity, hasData = false;
+                if (this._lockedMin !== null && this._lockedMax !== null) { min = this._lockedMin; max = this._lockedMax; hasData = true; }
+                else {
+                    // Seule la partie visible de chaque tuile compte (les tuiles de zoom bas couvrent une zone bien plus large que l'écran)
+                    const b = this._map.getBounds(), z = this._tileZoom;
+                    const nw = this._map.project(b.getNorthWest(), z), se = this._map.project(b.getSouthEast(), z);
+                    for (const key in this._tiles) {
+                        const t = this._tiles[key];
+                        if (t.coords.z !== z) continue;
+                        const els = t.el.elevations; if (!els) continue;
+                        const ox = t.coords.x * 256, oy = t.coords.y * 256;
+                        const x0 = Math.max(0, Math.floor(nw.x - ox)), x1 = Math.min(255, Math.ceil(se.x - ox));
+                        const y0 = Math.max(0, Math.floor(nw.y - oy)), y1 = Math.min(255, Math.ceil(se.y - oy));
+                        if (x1 < x0 || y1 < y0) continue;
+                        for (let y = y0; y <= y1; y += 2) for (let x = x0; x <= x1; x += 2) {
+                            const el = els[y * 256 + x];
+                            if (el > -500 && el < 8850) { if (el < min) min = el; if (el > max) max = el; hasData = true; }
                         }
                     }
                 }
-                if (hasData) {
-                    if (max - min < 10) max = min + 10; this._currentMin = min; this._currentMax = max;
-                    for (let key in this._tiles) if (this._tiles[key].el.elevations) this._drawTile(this._tiles[key].el);
-                    updateLegend(min, max);
-                }
+                if (!hasData || min === Infinity) return;
+                min = Math.floor(min); max = Math.ceil(max);
+                if (max - min < 10) max = min + 10;
+                const changed = force === true || min !== this._currentMin || max !== this._currentMax;
+                this._currentMin = min; this._currentMax = max;
+                if (!changed) return;                       // pas de redessin inutile à chaque déplacement
+                this._buildLut();
+                for (const key in this._tiles) { const el = this._tiles[key].el; if (el.elevations) this._drawTile(el); }
+                updateLegend(min, max);
             },
             _drawTile: function(tile) {
-                let ctx = tile.getContext('2d'); let imgData = ctx.createImageData(256, 256); let data = imgData.data;
-                let min = this._currentMin; let max = this._currentMax; let cL = colors.low, cM = colors.mid, cH = colors.high;
-                for (let i = 0; i < tile.elevations.length; i++) {
-                    let el = tile.elevations[i]; let t = (max - min) === 0 ? 0 : (el - min) / (max - min); if (t < 0) t = 0; if (t > 1) t = 1;
-                    let r, g, b;
-                    if (t < 0.5) { let lt = t * 2; r = cL[0] + (cM[0] - cL[0]) * lt; g = cL[1] + (cM[1] - cL[1]) * lt; b = cL[2] + (cM[2] - cL[2]) * lt; 
-                    } else { let lt = (t - 0.5) * 2; r = cM[0] + (cH[0] - cM[0]) * lt; g = cM[1] + (cH[1] - cM[1]) * lt; b = cM[2] + (cH[2] - cM[2]) * lt; }
-                    if (min > 2000) { let frost = Math.min((min - 2000) / 6000, 0.25); r += (255 - r) * frost; g += (255 - g) * frost; b += (255 - b) * frost; }
-                    let brightness = 0.5 + (t * 0.7); 
-                    data[i*4] = Math.min(255, r * brightness); data[i*4+1] = Math.min(255, g * brightness); data[i*4+2] = Math.min(255, b * brightness); data[i*4+3] = 255;
-                }
-                ctx.putImageData(imgData, 0, 0);
+                const els = tile.elevations, lut = this._lut, min = this._currentMin, top = LUT_SIZE - 1;
+                const k = top / (this._currentMax - min);
+                for (let i = 0; i < 65536; i++) { const idx = ((els[i] - min) * k) | 0; scratch32[i] = lut[idx < 0 ? 0 : idx > top ? top : idx]; }
+                tile.getContext('2d').putImageData(scratchImage, 0, 0);
             }
         });
 
         // --- 3. MOTEUR POUR L'EAU ---
+        const WATER_PX = packRGBA(0, 100, 200, 150);
         L.WaterCanvasLayer = L.GridLayer.extend({
+            initialize: function (options) { L.GridLayer.prototype.initialize.call(this, options); this.on('tileunload', e => { e.tile._dead = true; }); },
             createTile: function (coords, done) {
-                var tile = L.DomUtil.create('canvas', 'leaflet-tile'); tile.width = 256; tile.height = 256;
-                var ctx = tile.getContext('2d', { willReadFrequently: true });
-                let s = ['a', 'b', 'c', 'd'][Math.floor(Math.random() * 4)];
-                fetchRawTileData(`https://${s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/${coords.z}/${coords.x}/${coords.y}.png`).then(imgData => {
+                const tile = L.DomUtil.create('canvas', 'leaflet-tile'); tile.width = 256; tile.height = 256;
+                fetchRawTileData(`https://tile.openstreetmap.org/${coords.z}/${coords.x}/${coords.y}.png`, () => tile._dead).then(imgData => {
                     try {
-                        if(imgData) {
-                            var data = imgData.data;
-                            for (var i = 0; i < data.length; i += 4) {
-                                if (data[i+2] > data[i] + 10 && data[i+2] > data[i+1]) { data[i] = 0; data[i+1] = 100; data[i+2] = 200; data[i+3] = 150; 
-                                } else { data[i+3] = 0; }
-                            }
-                            ctx.putImageData(imgData, 0, 0);
+                        if (imgData && !tile._dead) {
+                            const d = imgData.data;
+                            for (let i = 0, j = 0; i < 65536; i++, j += 4) { const r = d[j], g = d[j + 1], b = d[j + 2]; scratch32[i] = (b > r + 10 && b > g) ? WATER_PX : 0; }
+                            tile.getContext('2d').putImageData(scratchImage, 0, 0);
                         }
                     } catch(e) {}
                     done(null, tile);
@@ -339,23 +435,77 @@
             }
         });
 
+        // --- 3b. LIGNES TOPO : même rendu que "grayscale + contraste + multiply", mais calculé une seule fois par tuile.
+        // Multiplier par un gris g revient à poser du noir d'opacité (1 - g) : plus besoin de mix-blend-mode ni de filter CSS,
+        // qui obligeaient iOS à recomposer toute la carte hors-écran à chaque image pendant un déplacement.
+        const TOPO_A = new Uint8Array(256), TOPO_PX = new Uint32Array(256);
+        for (let g = 0; g < 256; g++) {
+            let v = Math.min(1, g / 255 * 1.05);                  // brightness(105%)
+            v = Math.max(0, Math.min(1, (v - 0.5) * 1.5 + 0.5));  // contrast(150%)
+            TOPO_A[g] = Math.round(255 * (1 - v)); TOPO_PX[g] = packRGBA(0, 0, 0, TOPO_A[g]);
+        }
+        function topoToAlpha(imgData) {
+            const d = imgData.data, out = new Uint32Array(d.buffer);
+            for (let i = 0, j = 0; i < 65536; i++, j += 4) {
+                const lum = (d[j] * 0.2126 + d[j + 1] * 0.7152 + d[j + 2] * 0.0722) | 0;
+                const a = d[j + 3];
+                out[i] = a === 255 ? TOPO_PX[lum] : packRGBA(0, 0, 0, (TOPO_A[lum] * a / 255) | 0);
+            }
+        }
+        function paintTopoTile(img) {
+            scratchCtx.clearRect(0, 0, 256, 256); scratchCtx.drawImage(img, 0, 0, 256, 256);
+            const id = scratchCtx.getImageData(0, 0, 256, 256); topoToAlpha(id);
+            const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+            c.getContext('2d').putImageData(id, 0, 0);
+            return c;
+        }
+        L.TopoLinesLayer = L.GridLayer.extend({
+            initialize: function (options) { L.GridLayer.prototype.initialize.call(this, options); this.on('tileunload', e => { e.tile._dead = true; }); },
+            createTile: function (coords, done) {
+                const tile = L.DomUtil.create('canvas', 'leaflet-tile'); tile.width = 256; tile.height = 256;
+                const url = expandExportTileUrl(this.options.url, coords.z, coords.x, coords.y);
+                queueImage(url, () => tile._dead).promise.then(img => {
+                    try {
+                        if (img && img !== CANCELLED && !tile._dead) {
+                            scratchCtx.clearRect(0, 0, 256, 256); scratchCtx.drawImage(img, 0, 0, 256, 256);
+                            const id = scratchCtx.getImageData(0, 0, 256, 256); topoToAlpha(id);
+                            tile.getContext('2d').putImageData(id, 0, 0);
+                        }
+                    } catch(e) {}
+                    done(null, tile);
+                });
+                return tile;
+            }
+        });
+
+        function createLayer(def) {
+            const pane = `pane_${def.id}`, kb = IS_MOBILE ? 1 : 2;
+            const base = { maxZoom: 18, pane, keepBuffer: kb, updateWhenIdle: false, updateInterval: 120 };
+            if (def.maxNative) base.maxNativeZoom = def.maxNative;
+            if (def.attribution) base.attribution = def.attribution;
+            switch (def.type) {
+                case 'topoblend': return new L.TopoLinesLayer(Object.assign({ url: def.url }, base));
+                case 'water_canvas': return new L.WaterCanvasLayer(base);
+                case 'custom': return new L.DynamicElevationLayer(base);
+                case 'wms': return L.tileLayer.wms(def.url, { layers: def.wmsLayer, format: 'image/png', transparent: true, pane, keepBuffer: kb, updateWhenIdle: false, updateInterval: 120, crossOrigin: 'anonymous' });
+                case 'group': return L.layerGroup([
+                    L.tileLayer('https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png', { maxZoom: 18, pane, keepBuffer: kb, updateWhenIdle: false, updateInterval: 120, crossOrigin: 'anonymous' }),
+                    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18, maxNativeZoom: 16, pane, keepBuffer: kb, updateWhenIdle: false, updateInterval: 120, crossOrigin: 'anonymous' })
+                ]);
+                default:
+                    // Satellite : affichage sans crossOrigin pour qu'une tuile s'affiche toujours, même si le serveur change sa politique CORS.
+                    // (La lecture de couleur / l'export PDF font leur propre requête CORS et ignorent la tuile si elle est refusée.)
+                    return L.tileLayer(def.url, def.sat ? base : Object.assign({ crossOrigin: 'anonymous' }, base));
+            }
+        }
+
         function initLayers() {
-            layerDefs.forEach((def, index) => {
-                if(!map.getPane(`pane_${def.id}`)) {
-                    map.createPane(`pane_${def.id}`);
-                    if(def.type === 'topoblend') { map.getPane(`pane_${def.id}`).style.filter = "grayscale(100%) brightness(105%) contrast(150%)"; map.getPane(`pane_${def.id}`).style.mixBlendMode = "multiply"; }
-                }
-                if(!layersObj[def.id]) {
-                    let l;
-                    if(def.type === 'xyz' || def.type === 'topoblend') { l = L.tileLayer(def.url, { maxZoom: 18, pane: `pane_${def.id}`, crossOrigin: 'anonymous' }); }
-                    else if(def.type === 'water_canvas') { l = new L.WaterCanvasLayer({ pane: `pane_${def.id}`, maxZoom: 18, crossOrigin: true }); }
-                    else if(def.type === 'wms') l = L.tileLayer.wms(def.url, { layers: def.wmsLayer, format: 'image/png', transparent: true, pane: `pane_${def.id}`, crossOrigin: 'anonymous' });
-                    else if(def.type === 'group') { l = L.layerGroup([ L.tileLayer('https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png', { maxZoom: 18, pane: `pane_${def.id}`, crossOrigin: 'anonymous' }), L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', { maxZoom: 20, pane: `pane_${def.id}`, crossOrigin: 'anonymous' }) ]); } 
-                    else if(def.type === 'custom') l = new L.DynamicElevationLayer({ pane: `pane_${def.id}` });
-                    layersObj[def.id] = l;
-                }
-                if(def.active && !map.hasLayer(layersObj[def.id])) layersObj[def.id].addTo(map);
-                else if(!def.active && map.hasLayer(layersObj[def.id])) map.removeLayer(layersObj[def.id]);
+            layerDefs.forEach(def => {
+                if (!map.getPane(`pane_${def.id}`)) map.createPane(`pane_${def.id}`);
+                if (!layersObj[def.id]) layersObj[def.id] = createLayer(def);
+                const l = layersObj[def.id];
+                if (def.active && !map.hasLayer(l)) l.addTo(map);
+                else if (!def.active && map.hasLayer(l)) map.removeLayer(l);
                 setLayerOpacity(def.id, def.op);
             });
             updateZIndexes(); renderLayerList();
@@ -371,18 +521,17 @@
             }
         }
 
-        // --- PRÉRÉGLAGES ---
+        // --- PRÉRÉGLAGES --- (id : [actif, opacité])
+        const PRESETS = {
+            default: { top:[false,100], base_lines:[true,70], water:[true,100], ele:[true,70], geo_w:[true,80], geo_fr:[false,60], base_full:[false,100], sat_fr:[false,100], sat:[false,100] },
+            topo:    { top:[false,100], base_lines:[true,70], water:[true,100], ele:[true,90], geo_w:[false,80], geo_fr:[false,60], base_full:[false,100], sat_fr:[false,100], sat:[false,100] },
+            geol:    { top:[false,100], base_lines:[true,70], water:[true,100], ele:[false,70], geo_w:[true,90], geo_fr:[true,90], base_full:[false,100], sat_fr:[false,100], sat:[false,100] },
+            // Satellite : IGN (France, très haute résolution) posé sur Esri (monde), courbes de niveau et sentiers par-dessus
+            sat:     { top:[true,100], base_lines:[true,45], water:[false,100], ele:[false,70], geo_w:[false,80], geo_fr:[false,60], base_full:[false,100], sat_fr:[true,100], sat:[true,100] }
+        };
         function applyPreset(type) {
-            if (type === 'default') {
-                updateLayerConfig('top', false, 100); updateLayerConfig('base_lines', true, 70); updateLayerConfig('water', true, 100);
-                updateLayerConfig('ele', true, 70); updateLayerConfig('geo_w', true, 80); updateLayerConfig('geo_fr', false, 60); updateLayerConfig('base_full', false, 100);
-            } else if (type === 'topo') {
-                updateLayerConfig('top', false, 100); updateLayerConfig('base_lines', true, 70); updateLayerConfig('water', true, 100);
-                updateLayerConfig('ele', true, 90); updateLayerConfig('geo_w', false, 80); updateLayerConfig('geo_fr', false, 60); updateLayerConfig('base_full', false, 100);
-            } else if (type === 'geol') {
-                updateLayerConfig('top', false, 100); updateLayerConfig('base_lines', true, 70); updateLayerConfig('water', true, 100);
-                updateLayerConfig('ele', false, 70); updateLayerConfig('geo_w', true, 90); updateLayerConfig('geo_fr', true, 90); updateLayerConfig('base_full', false, 100);
-            }
+            const p = PRESETS[type]; if (!p) return;
+            for (const id in p) updateLayerConfig(id, p[id][0], p[id][1]);
             renderLayerList();
         }
 
@@ -438,7 +587,7 @@
 
         window.resetElevationScale = function() {
             let eleL = layersObj['ele'];
-            if(eleL) { eleL._lockedMin = null; eleL._lockedMax = null; eleL._updateMinMax(); }
+            if(eleL) { eleL._lockedMin = null; eleL._lockedMax = null; eleL._updateMinMax(true); }
         }
 
         function toggleRuler() {
@@ -508,7 +657,7 @@
             if (min < Infinity && max > -Infinity) {
                 if (max - min < 10) max = min + 10;
                 let eleL = layersObj['ele'];
-                if(eleL) { eleL._lockedMin = min; eleL._lockedMax = max; eleL._updateMinMax(); }
+                if(eleL) { eleL._lockedMin = min; eleL._lockedMax = max; eleL._updateMinMax(true); }
             } else { alert("Aucune donnée d'altitude trouvée dans cette zone."); }
             
             // On valide mais on laisse l'outil ouvert et la mémoire du Crayon active
@@ -516,12 +665,25 @@
             document.getElementById('btn-pdf').style.background = 'white';
             clearPencil(); setActionBar(null); map._container.style.cursor = '';
             // La zone est maintenant mémorisée, on ouvre directement les options PDF.
-            document.getElementById('pdf-export-panel').style.display = 'flex';
+            document.getElementById('pdf-export-panel').style.display = 'flex'; ensureJsPdf();
         }
 
         // --- EXPORT PDF HAUTE RÉSOLUTION, PAR RECOMPOSITION DES TUILES ---
         const exportImageCache = {};
         const PDF_PAPER_MM = { a4: [297, 210], a3: [420, 297], a2: [594, 420] };
+
+        let jsPdfPromise = null;
+        function ensureJsPdf() {
+            if (window.jspdf && window.jspdf.jsPDF) return Promise.resolve(true);
+            if (!jsPdfPromise) jsPdfPromise = new Promise(resolve => {
+                const s = document.createElement('script');
+                s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+                s.onload = () => resolve(true);
+                s.onerror = () => { jsPdfPromise = null; resolve(false); };
+                document.head.appendChild(s);
+            });
+            return jsPdfPromise;
+        }
 
         function startPdfSelection() {
             const panel = document.getElementById('pdf-export-panel');
@@ -547,6 +709,7 @@
             }
             const panel = document.getElementById('pdf-export-panel');
             panel.style.display = panel.style.display === 'flex' ? 'none' : 'flex';
+            if (panel.style.display === 'flex') ensureJsPdf();
         }
 
         function setPdfProgress(text, visible = true) {
@@ -575,12 +738,12 @@
                 return [`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${wrappedX}/${y}.png`];
             }
             if (def.id === 'water') {
-                return [`https://a.basemaps.cartocdn.com/rastertiles/voyager_nolabels/${z}/${wrappedX}/${y}.png`];
+                return [`https://tile.openstreetmap.org/${z}/${wrappedX}/${y}.png`];
             }
             if (def.id === 'top') {
                 return [
                     `https://tile.waymarkedtrails.org/hiking/${z}/${wrappedX}/${y}.png`,
-                    `https://a.basemaps.cartocdn.com/rastertiles/voyager_only_labels/${z}/${wrappedX}/${y}.png`
+                    `https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/${z}/${y}/${wrappedX}`
                 ];
             }
 
@@ -662,7 +825,6 @@
             // Les tuiles sont d'abord dessinées normalement sur leur propre canevas.
             // Le mode "multiply" de la couche topo est appliqué uniquement lors de
             // la composition sur la carte finale, comme le faisait le CSS Leaflet.
-            if (def.id === 'base_lines') sctx.filter = 'grayscale(100%) brightness(105%) contrast(150%)';
 
             const jobs = [];
             for (let y = tileMinY; y <= tileMaxY; y++) {
@@ -685,6 +847,8 @@
                             tile = paintTerrariumTile(img, ele ? ele._currentMin : 0, ele ? ele._currentMax : 1000);
                         } else if (def.id === 'water') {
                             tile = paintWaterTile(img);
+                        } else if (def.id === 'base_lines') {
+                            tile = paintTopoTile(img);
                         }
                         sctx.drawImage(tile, (job.x - tileMinX) * 256, (job.y - tileMinY) * 256, 256, 256);
                     } else {
@@ -706,14 +870,14 @@
             const workerCount = Math.min(8, Math.max(1, jobs.length));
             await Promise.all(Array.from({ length: workerCount }, worker));
 
-            sctx.filter = 'none';
+            jobs.forEach(j => { delete exportImageCache[j.url]; }); // libère les tuiles décodées (mémoire iPhone)
             ctx.save();
             ctx.globalAlpha = Math.max(0, Math.min(1, def.op / 100));
             // Reproduction du rendu Leaflet : la couche OpenTopoMap est
             // en mode multiply dans la carte web. Les tuiles étant désormais
             // correctement chargées au bon zoom, on peut réutiliser ce mode
             // sans perdre les lignes noires.
-            ctx.globalCompositeOperation = def.id === 'base_lines' ? 'multiply' : 'source-over';
+            ctx.globalCompositeOperation = 'source-over'; // les lignes topo sont déjà des pixels noirs semi-transparents
             ctx.drawImage(stage, cropX, cropY, cropW, cropH, 0, 0, geometry.outputW, geometry.outputH);
             ctx.restore();
         }
@@ -735,10 +899,11 @@
             const ids = new Set(layerDefs.filter(d => d.active).map(d => d.id));
             const sources = ['© OpenStreetMap contributors'];
             if (ids.has('base_lines') || ids.has('base_full')) sources.push('OpenTopoMap-R via OpenMaps.fr');
-            if (ids.has('top')) sources.push('Waymarked Trails');
-            if (ids.has('water')) sources.push('CARTO');
-            if (ids.has('geo_w') || ids.has('geo_fr')) sources.push('Macrostrat / BRGM');
+            if (ids.has('top')) sources.push('Waymarked Trails • Esri (noms)');
+                        if (ids.has('geo_w') || ids.has('geo_fr')) sources.push('Macrostrat / BRGM');
             if (ids.has('ele')) sources.push('AWS Terrain Tiles');
+            if (ids.has('sat_fr')) sources.push('© IGN – Géoplateforme');
+            if (ids.has('sat')) sources.push('Imagery © Esri, Maxar, Earthstar Geographics');
             return sources.join(' • ');
         }
 
@@ -747,7 +912,7 @@
                 startPdfSelection();
                 return;
             }
-            if (!window.jspdf || !window.jspdf.jsPDF) {
+            if (!(await ensureJsPdf())) {
                 alert('La bibliothèque PDF n’est pas disponible. Vérifiez votre connexion Internet puis réessayez.'); return;
             }
             const paper = document.getElementById('pdf-paper').value;
@@ -846,7 +1011,7 @@
             if (layerDef.id === 'water') {
                 let targetZ = Math.min(currentZoom, 14); let pt = map.project([lat, lng], targetZ);
                 let tileX = Math.floor(pt.x / 256), tileY = Math.floor(pt.y / 256);
-                let url = `https://a.basemaps.cartocdn.com/rastertiles/voyager_nolabels/${targetZ}/${tileX}/${tileY}.png`;
+                let url = `https://tile.openstreetmap.org/${targetZ}/${tileX}/${tileY}.png`;
                 let imgData = await fetchRawTileData(url);
                 if(imgData) {
                     let xInside = Math.floor(pt.x % 256); if(xInside < 0) xInside += 256; let yInside = Math.floor(pt.y % 256); if(yInside < 0) yInside += 256;
@@ -857,24 +1022,29 @@
             }
             
             let layer = layersObj[layerDef.id]; if(!layer) return null;
-            
-            let targetZ = currentZoom;
-            if(layerDef.id === 'geo_w' && targetZ > 12) targetZ = 12; 
-            if(layerDef.id === 'geo_fr' && targetZ > 15) targetZ = 15;
-            if(layerDef.id === 'base_full' && targetZ > 17) targetZ = 17;
-            
-            // Calcul point exact Mercator pour éviter le décalage Macrostrat
+
+            let targetZ = Math.min(currentZoom, layerDef.sampleMax || layerDef.maxNative || 18);
+
+            // Calcul point exact Mercator pour éviter le décalage entre la tuile et le pixel lu
             let pt = map.project([lat, lng], targetZ);
             let tileX = Math.floor(pt.x / 256), tileY = Math.floor(pt.y / 256);
-            let coords = L.point(tileX, tileY); coords.z = targetZ;
-            let url = typeof layer.getTileUrl === 'function' ? layer.getTileUrl(coords) : null;
+            let url = null;
+            if (layerDef.type === 'wms') {
+                let coords = L.point(tileX, tileY); coords.z = targetZ;
+                url = layer.getTileUrl(coords);
+            } else if (layerDef.url) {
+                // URL construite ici : layer.getTileUrl() de Leaflet utilise le zoom courant de la carte, pas targetZ
+                url = expandExportTileUrl(layerDef.url, targetZ, tileX, tileY);
+            }
             if(!url) return null;
-            
+
             let imgData = await fetchRawTileData(url);
             if(imgData) {
                 let xInside = Math.floor(pt.x % 256); if(xInside < 0) xInside += 256; let yInside = Math.floor(pt.y % 256); if(yInside < 0) yInside += 256;
                 let d = imgData.data;
                 
+                // Satellite : le pixel est la vérité terrain, pas de filtre anti-bruit (qui ignorerait forêts et ombres)
+                if (layerDef.sat) { let c = (yInside * 256 + xInside) * 4; return d[c+3] > 0 ? { r: d[c], g: d[c+1], b: d[c+2], a: layerDef.op / 100 } : null; }
                 // Moteur Anti-Bruit (Ignore les lignes noires et écritures)
                 let r_sum = 0, g_sum = 0, b_sum = 0, count = 0;
                 for(let dy = -2; dy <= 2; dy++){
@@ -1127,7 +1297,7 @@
         function hexToRgb(h) { let b=parseInt(h.substring(1),16); return [(b>>16)&255, (b>>8)&255, b&255]; } function rgbToHex(r,g,b) { return "#" + (1<<24 | r<<16 | g<<8 | b).toString(16).slice(1); }
         function applyColors() {
             colors.low = hexToRgb(document.getElementById('col-low').value); colors.mid = hexToRgb(document.getElementById('col-mid').value); colors.high = hexToRgb(document.getElementById('col-high').value);
-            if(layersObj['ele']) layersObj['ele']._updateMinMax(); updateLegend(layersObj['ele'] ? layersObj['ele']._currentMin : 0, layersObj['ele'] ? layersObj['ele']._currentMax : 1000);
+            if(layersObj['ele']) layersObj['ele']._updateMinMax(true); updateLegend(layersObj['ele'] ? layersObj['ele']._currentMin : 0, layersObj['ele'] ? layersObj['ele']._currentMax : 1000);
         }
         ['col-low', 'col-mid', 'col-high'].forEach(id => document.getElementById(id).addEventListener('input', applyColors));
         function saveSettings() {
@@ -1137,7 +1307,7 @@
         function loadSettings() {
             const saved = JSON.parse(localStorage.getItem('mapRandoV33'));
             if(saved) {
-                let newDefs = []; saved.layerDefs.forEach(s => { let d = layerDefs.find(x => x.id === s.id); if(d){ d.active=s.active; d.op=s.op; newDefs.push(d);} }); layerDefs = newDefs;
+                let newDefs = []; saved.layerDefs.forEach(s => { let d = layerDefs.find(x => x.id === s.id); if(d){ d.active=s.active; d.op=s.op; newDefs.push(d);} }); layerDefs.forEach(d => { if (!newDefs.includes(d)) newDefs.push(d); }); layerDefs = newDefs;
                 document.getElementById('col-low').value = saved.colLow; document.getElementById('col-mid').value = saved.colMid; document.getElementById('col-high').value = saved.colHigh;
             } else { document.getElementById('col-low').value = rgbToHex(...colors.low); document.getElementById('col-mid').value = rgbToHex(...colors.mid); document.getElementById('col-high').value = rgbToHex(...colors.high); }
             initLayers(); applyColors();
@@ -1165,7 +1335,7 @@
             }; reader.readAsText(file);
         }
 
-        loadSettings(); locateUser();
+        loadSettings(); if (AUTO_LOCATE_ON_START || !hasSavedView) locateUser();
     </script>
 </body>
 </html>
