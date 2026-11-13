@@ -103,7 +103,8 @@
         /* MODE GPS : carte agrandie puis inclinée en perspective, ciel derrière */
         #gps-sky { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 0; display: none; background: linear-gradient(#7fb2e5 0%, #cfe2f3 40%, #e8eef3 100%); }
         body.gps-on #gps-sky { display: block; }
-        body.gps-on #map { position: absolute !important; left: -20%; top: -10%; width: 140% !important; height: 150% !important; z-index: 1; transform-origin: 50% 50%; }
+        body.gps-on #map { position: absolute !important; left: 0; top: 22%; width: 100% !important; height: 100% !important; z-index: 1; overflow: visible !important; transform-origin: 50% 50%; }
+        #gps-haze { position: absolute; left: 0; right: 0; height: 280px; z-index: 2; display: none; pointer-events: none; background: linear-gradient(to bottom, rgba(214,230,244,1) 0px, rgba(214,230,244,1) 80px, rgba(214,230,244,0) 280px); }
         #gps-hud { position: absolute; top: 62px; left: 15px; z-index: 1500; display: none; width: calc(100% - 100px); max-width: 300px; box-sizing: border-box; background: rgba(255,255,255,.93); border-radius: 10px; padding: 8px 10px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
         #gps-hud .gps-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
         #gps-hud label { flex: 1; display: flex; align-items: center; gap: 6px; font-weight: 600; }
@@ -147,6 +148,7 @@
             <button id="gps-compass" onclick="toggleCompassMode()">🧭 Nord en haut</button>
             <span id="gps-compass-msg" style="font-size:10px;color:#555;flex:1"></span>
         </div>
+        <label class="gps-check"><input type="checkbox" id="gps-auto-relief" checked onchange="gpsReliefToggle()"> Échelle de relief = 3 prochaines minutes</label>
         <details class="gps-calib">
             <summary>🔧 Calibrer la boussole</summary>
             <div class="gps-row"><label>Correction <input type="range" id="gps-offset" min="-180" max="180" value="0" oninput="setCompassOffset(this.value)"><b id="gps-offset-val" style="min-width:38px;text-align:right">0°</b></label></div>
@@ -185,6 +187,7 @@
     </div>
 
     <div id="gps-sky"></div>
+    <div id="gps-haze"></div>
     <div id="map"></div>
     <div class="legend-box" id="legend">0m<div class="color-bar" style="background: linear-gradient(to top, green, yellow, brown)"></div>0m</div>
 
@@ -1394,12 +1397,12 @@
 
         function applyGpsTransform() {
             const el = map.getContainer();
-            el.style.transform = (gpsTilt > 0 || gpsRotation) ? `perspective(900px) rotateX(${gpsTilt}deg) rotateZ(${-gpsRotation}deg)` : '';
-            // fondu vers l'horizon : le bord lointain de la carte se dissout dans le ciel
-            const m = gpsTilt > 0 ? 'linear-gradient(to bottom, transparent 0%, #000 16%)' : '';
-            el.style.webkitMaskImage = m; el.style.maskImage = m;
+            el.style.transform = (gpsTilt > 0 || gpsRotation) ? `perspective(${900}px) rotateX(${gpsTilt}deg) rotateZ(${-gpsRotation}deg)` : '';
+            el.style.webkitMaskImage = ''; el.style.maskImage = '';
+            gpsView.rot = gpsRotation * Math.PI / 180;
+            if (gpsView.on && Math.abs(angleDiff(gpsRotation, gpsView.appliedRotDeg)) >= 10) gpsScheduleRefresh();
         }
-        function setGpsTilt(deg) { gpsTilt = Number(deg) || 0; applyGpsTransform(); }
+        function setGpsTilt(deg) { gpsTilt = Number(deg) || 0; applyGpsTransform(); if (gpsView.on) { gpsViewUpdate(); gpsScheduleRefresh(); } }
 
         // Cap utilisé : GPS si on roule vite (ignore les perturbations magnétiques du train), sinon boussole + correction manuelle
         function currentHeading() {
@@ -1468,13 +1471,155 @@
             compassOn = false; compassH = null; compassAcc = null; gpsRotation = 0;
         }
 
+        // --- 6b. VISIBILITÉ VERS L'AVANT : on ne charge que ce qui est visible à l'écran (jusqu'à l'horizon), dans l'axe de la vue ---
+        const GPS_PERSP = 900, GPS_MAX_DEPTH_PX = 2600;
+        const gpsView = { on: false, rot: 0, appliedRotDeg: 0, depth: 0, behind: 0, W: 0, sinT: 0, radius: 0 };
+
+        function gpsViewUpdate() {
+            const el = map.getContainer(), H = window.innerHeight, W = window.innerWidth;
+            const c = el.offsetTop + el.offsetHeight / 2;                    // où se trouve l'utilisateur à l'écran (px depuis le haut)
+            const t = gpsTilt * Math.PI / 180, d = GPS_PERSP, sT = Math.sin(t), cT = Math.cos(t);
+            const k = d * cT - c * sT;
+            const need = k > 1 ? c * d / k : GPS_MAX_DEPTH_PX;               // distance (px carte) à charger pour atteindre le haut de l'écran
+            const depth = Math.max(0.6 * H, Math.min(GPS_MAX_DEPTH_PX, need));
+            const bot = H - c, behind = Math.max(0.15 * H, bot * d / (d * cT + bot * sT));
+            const halfWFar = (W / 2) * (d + depth * sT) / d;
+            Object.assign(gpsView, { depth, behind, W, sinT: sT, radius: Math.max(Math.hypot(depth, halfWFar), Math.hypot(behind, W)) + 300 });
+            // Ciel + brume : le bord lointain des tuiles se fond dans l'horizon
+            const yEdge = c - depth * cT * d / (d + depth * sT), top = Math.max(0, yEdge - 80);
+            document.getElementById('gps-sky').style.background = `linear-gradient(to bottom, #78aee3 0px, #d6e6f4 ${Math.max(40, top)}px, #d6e6f4 100%)`;
+            const haze = document.getElementById('gps-haze');
+            if (yEdge > 30) { haze.style.display = 'block'; haze.style.top = top + 'px'; }
+            else haze.style.display = 'none';
+        }
+
+        // Une tuile est utile si son centre est dans le trapèze visible : devant (jusqu'à la profondeur), derrière, et de plus en plus large au loin
+        function gpsTileInView(layer, coords) {
+            const map = layer._map; if (!map || layer._tileZoom === undefined) return true;
+            const z = layer._tileZoom, size = layer.getTileSize().x;
+            const mapZoom = map._animatingZoom ? Math.max(map._animateToZoom, map.getZoom()) : map.getZoom();
+            const scale = map.getZoomScale(mapZoom, z);
+            const cp = map.project(map.getCenter(), z);
+            const dx = ((coords.x + 0.5) * size - cp.x) * scale, dy = ((coords.y + 0.5) * size - cp.y) * scale;
+            const s = Math.sin(gpsView.rot), co = Math.cos(gpsView.rot);
+            const u = dx * s - dy * co, x = dx * co + dy * s;               // u = vers l'avant (haut de l'écran), x = vers la droite
+            const half = size * scale * 0.75;
+            if (u > gpsView.depth + half || u < -gpsView.behind - half) return false;
+            const halfW = Math.max(gpsView.W * 0.55, (gpsView.W / 2) * (GPS_PERSP + u * gpsView.sinT) / GPS_PERSP) + half;
+            return Math.abs(x) <= halfW;
+        }
+
+        // Greffe sur Leaflet (1.9.4) : zone de chargement étendue + filtre en trapèze + purge des tuiles hors vue. Sans effet hors mode GPS.
+        (function patchGridLayer() {
+            const P = L.GridLayer.prototype, oBounds = P._getTiledPixelBounds, oValid = P._isValidTile, oUpdate = P._update;
+            if (typeof oBounds !== 'function' || typeof oValid !== 'function' || typeof oUpdate !== 'function') return;
+            P._getTiledPixelBounds = function (center) {
+                const b = oBounds.call(this, center);
+                if (!gpsView.on || !this._map || this._tileZoom === undefined) return b;
+                const map = this._map, mapZoom = map._animatingZoom ? Math.max(map._animateToZoom, map.getZoom()) : map.getZoom();
+                const R = gpsView.radius / map.getZoomScale(mapZoom, this._tileZoom), c = map.project(center, this._tileZoom).floor();
+                b.extend(c.subtract([R, R])); b.extend(c.add([R, R]));
+                return b;
+            };
+            P._isValidTile = function (coords) { return oValid.call(this, coords) && (!gpsView.on || gpsTileInView(this, coords)); };
+            P._update = function (center) {
+                oUpdate.call(this, center);
+                if (!gpsView.on || !this._map || this._tileZoom === undefined) return;
+                let dropped = false;
+                for (const key in this._tiles) {
+                    const t = this._tiles[key];
+                    if (t.current && t.coords.z === this._tileZoom && !gpsTileInView(this, t.coords)) { t.current = false; dropped = true; }
+                }
+                if (dropped) this._pruneTiles();   // libère la mémoire (iPhone) des tuiles qui ne servent plus
+            };
+        })();
+
+        function gpsRefreshTiles() {
+            gpsView.appliedRotDeg = gpsRotation;
+            Object.values(layersObj).forEach(l => {
+                const each = fn => (typeof l.eachLayer === 'function' ? l.eachLayer(fn) : fn(l));
+                each(x => { if (typeof x._update === 'function' && x._map) x._update(); });
+            });
+        }
+        let gpsRefreshTimer = null;
+        function gpsScheduleRefresh() {
+            if (gpsRefreshTimer) return;
+            gpsRefreshTimer = setTimeout(() => { gpsRefreshTimer = null; if (gpsView.on) gpsRefreshTiles(); }, 400);
+        }
+        window.addEventListener('resize', () => { if (gpsMode) { gpsViewUpdate(); gpsScheduleRefresh(); } });
+
+        // --- 6c. ÉCHELLE DE RELIEF = LES 3 PROCHAINES MINUTES : on regarde le terrain devant, sur la distance qu'on parcourra à la vitesse actuelle
+        const GPS_LOOKAHEAD_S = 180, GPS_MIN_RANGE_M = 500, GPS_MAX_RANGE_M = 15000;
+        let gpsSpeedSm = 0, gpsRangeM = 0, gpsRangeAt = 0, gpsRangeBusy = false, gpsPrevLock = null;
+
+        function gpsReliefOn() { const el = document.getElementById('gps-auto-relief'); return !!(el && el.checked); }
+        function gpsRestoreReliefLock() {
+            const eleL = layersObj['ele'];
+            if (eleL && gpsPrevLock) { eleL._lockedMin = gpsPrevLock[0]; eleL._lockedMax = gpsPrevLock[1]; eleL._updateMinMax(true); }
+            gpsRangeM = 0;
+        }
+        function gpsReliefToggle() { if (gpsReliefOn()) gpsUpdateElevationRange(true); else { gpsRestoreReliefLock(); gpsRenderInfo(); } }
+
+        async function gpsUpdateElevationRange(force) {
+            const eleL = layersObj['ele'];
+            if (!gpsMode || !gpsLast || !eleL || !map.hasLayer(eleL) || !gpsReliefOn() || gpsRangeBusy) return;
+            const now = Date.now(); if (!force && now - gpsRangeAt < 5000) return;
+            gpsRangeBusy = true; gpsRangeAt = now;
+            try {
+                const range = Math.min(GPS_MAX_RANGE_M, Math.max(GPS_MIN_RANGE_M, gpsSpeedSm * GPS_LOOKAHEAD_S));
+                const h = currentHeading();
+                const course = gpsHsm !== null ? gpsHsm : (h !== null ? h : 0);        // direction de déplacement
+                const br = course * Math.PI / 180, ll = gpsLast.ll;
+                const mLat = 111320, mLng = 111320 * Math.cos(ll.lat * Math.PI / 180), half = Math.max(150, range * 0.25), pts = [];
+                for (let i = 0; i <= 14; i++) for (let j = -2; j <= 2; j++) {
+                    const along = range * i / 14, side = half * j / 2;
+                    const north = along * Math.cos(br) - side * Math.sin(br), east = along * Math.sin(br) + side * Math.cos(br);
+                    pts.push([ll.lat + north / mLat, ll.lng + east / mLng]);
+                }
+                const els = await Promise.all(pts.map(p => getElevationAt(p[0], p[1])));
+                let mn = Infinity, mx = -Infinity;
+                els.forEach(e => { if (e !== null && e > -500 && e < 8850) { if (e < mn) mn = e; if (e > mx) mx = e; } });
+                if (mn === Infinity || !gpsMode || !gpsReliefOn()) return;
+                const pad = Math.max(5, (mx - mn) * 0.05); mn -= pad; mx += pad;
+                const ease = gpsRangeM > 0 && eleL._lockedMin !== null;               // transition douce entre deux calculs
+                eleL._lockedMin = ease ? eleL._lockedMin + (mn - eleL._lockedMin) * 0.5 : mn;
+                eleL._lockedMax = ease ? eleL._lockedMax + (mx - eleL._lockedMax) * 0.5 : mx;
+                eleL._updateMinMax(true); gpsRangeM = range; gpsRenderInfo();
+            } catch (e) {} finally { gpsRangeBusy = false; }
+        }
+
+        // --- 6d. INCLINAISON À DEUX DOIGTS : glisser les deux doigts ensemble vers le haut = plus incliné, vers le bas = plus à plat
+        (function twoFingerTilt() {
+            let g = null;
+            const avgY = e => (e.touches[0].clientY + e.touches[1].clientY) / 2;
+            const dist = e => Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+            window.addEventListener('touchstart', e => {
+                if (gpsMode && e.touches.length === 2 && e.target.closest && e.target.closest('#map')) g = { y0: avgY(e), d0: dist(e), tilt0: gpsTilt, mode: 'undecided' };
+                else if (e.touches.length !== 2) g = null;
+            }, { capture: true, passive: true });
+            window.addEventListener('touchmove', e => {
+                if (!g || e.touches.length !== 2) return;
+                const dy = avgY(e) - g.y0, dd = dist(e) - g.d0;
+                if (g.mode === 'undecided') {
+                    if (Math.abs(dy) < 10 && Math.abs(dd) < 10) return;
+                    g.mode = Math.abs(dy) > Math.abs(dd) * 1.5 ? 'tilt' : 'pinch';  // doigts qui glissent ensemble = inclinaison ; qui s'écartent = zoom (laissé à Leaflet)
+                }
+                if (g.mode !== 'tilt') return;
+                e.preventDefault(); e.stopImmediatePropagation();
+                const t = Math.max(0, Math.min(65, g.tilt0 - dy * 0.3));
+                document.getElementById('gps-tilt').value = t; setGpsTilt(t);
+            }, { capture: true, passive: false });
+            window.addEventListener('touchend', e => { if (e.touches.length < 2) g = null; }, true);
+            window.addEventListener('touchcancel', () => { g = null; }, true);
+        })();
+
         function gpsRenderInfo() {
             const info = document.getElementById('gps-info');
             if (!gpsLast) return;
             const c = gpsLast.c, age = Math.max(0, Math.round((Date.now() - gpsLast.t) / 1000));
             const alt = typeof c.altitude === 'number' ? Math.round(c.altitude) + ' m' : '–';
             const spd = typeof c.speed === 'number' && c.speed >= 0 ? (c.speed * 3.6).toFixed(1) + ' km/h' : '–';
-            info.innerHTML = `<b>±${Math.round(c.accuracy)} m</b> · alt ${alt} · ${spd} · <span style="color:${age > 8 ? '#d00' : '#080'}">il y a ${age} s</span>${compassOn && compassAcc !== null && (compassAcc < 0 || compassAcc > 30) ? ' · ⚠️ boussole à calibrer (mouvement en 8)' : ''}`;
+            info.innerHTML = `<b>±${Math.round(c.accuracy)} m</b> · alt ${alt} · ${spd} · <span style="color:${age > 8 ? '#d00' : '#080'}">il y a ${age} s</span>${gpsRangeM ? ' · relief ' + (gpsRangeM >= 1000 ? (gpsRangeM / 1000).toFixed(1) + ' km' : Math.round(gpsRangeM) + ' m') : ''}${compassOn && compassAcc !== null && (compassAcc < 0 || compassAcc > 30) ? ' · ⚠️ boussole à calibrer (mouvement en 8)' : ''}`;
         }
 
         function gpsStartWatch() {
@@ -1496,6 +1641,7 @@
             if (!gpsMode) return;
             const c = pos.coords, ll = L.latLng(c.latitude, c.longitude), now = Date.now();
             gpsLast = { ll, t: now, c };
+            gpsSpeedSm = gpsSpeedSm * 0.6 + ((typeof c.speed === 'number' && c.speed >= 0) ? c.speed : 0) * 0.4;
             if (!gpsMarker) {
                 gpsMarker = L.marker(ll, { icon: L.divIcon({ className: 'gps-icon', html: '<div class="gps-rot" id="gps-rot"><div class="gps-arrow"></div><div class="gps-dot"></div></div>', iconSize: [28, 28], iconAnchor: [14, 14] }), interactive: false, keyboard: false, zIndexOffset: 1000 }).addTo(map);
                 gpsAcc = L.circle(ll, { radius: c.accuracy || 20, color: '#007AFF', weight: 1, fillColor: '#007AFF', fillOpacity: 0.12, interactive: false }).addTo(map);
@@ -1511,6 +1657,7 @@
                 else map.panTo(ll, { animate: true, duration: 0.8, easeLinearity: 1, noMoveStart: true });
             }
             gpsRenderInfo();
+            gpsUpdateElevationRange(false);
         }
 
         function gpsTick() {
@@ -1547,8 +1694,10 @@
             document.getElementById('gps-recenter').style.background = '#007AFF';
             map.doubleClickZoom.disable(); map.options.touchZoom = 'center'; // le zoom à deux doigts se fait autour du centre (les coordonnées tactiles sont faussées par l'inclinaison)
             const c = map.getCenter();
-            setGpsTilt(document.getElementById('gps-tilt').value);
+            gpsTilt = Number(document.getElementById('gps-tilt').value) || 0; gpsView.on = true; applyGpsTransform();
             map.invalidateSize({ animate: false, pan: false }); map.setView(c, map.getZoom(), { animate: false });
+            gpsViewUpdate(); gpsRefreshTiles();
+            { const eleL = layersObj['ele']; gpsPrevLock = eleL ? [eleL._lockedMin, eleL._lockedMax] : null; gpsRangeM = 0; gpsSpeedSm = 0; gpsRangeAt = 0; }
             if (uMarker) { map.removeLayer(uMarker); uMarker = null; }
             gpsStartWatch(); gpsRequestWake();
             gpsTimer = setInterval(gpsTick, 1000);
@@ -1566,8 +1715,11 @@
             document.getElementById('gps-hud').style.display = 'none';
             const el = map.getContainer(); el.style.transform = ''; el.style.webkitMaskImage = ''; el.style.maskImage = '';
             map.doubleClickZoom.enable(); map.options.touchZoom = true;
+            gpsView.on = false; gpsRestoreReliefLock();
+            document.getElementById('gps-haze').style.display = 'none';
             const c = map.getCenter();
             map.invalidateSize({ animate: false, pan: false }); map.setView(c, map.getZoom(), { animate: false });
+            gpsRefreshTiles();
         }
         function toggleGpsMode() { if (gpsMode) stopGps(); else startGps(); }
 
