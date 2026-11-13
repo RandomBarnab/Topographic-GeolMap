@@ -109,6 +109,7 @@
         #gps-hud label { flex: 1; display: flex; align-items: center; gap: 6px; font-weight: 600; }
         #gps-hud input[type="range"] { flex: 1; min-width: 0; }
         #gps-recenter { border: none; border-radius: 8px; background: #007AFF; color: #fff; font-size: 16px; padding: 4px 10px; }
+        #gps-compass { border: none; border-radius: 8px; background: #34c759; color: #fff; font-size: 12px; font-weight: 600; padding: 6px 10px; }
         #gps-hud .gps-credit { margin-top: 4px; font-size: 9px; color: #777; }
         .gps-icon { background: none; border: none; }
         .gps-rot { position: relative; width: 28px; height: 28px; }
@@ -137,6 +138,10 @@
         <div class="gps-row">
             <label>Inclinaison <input type="range" id="gps-tilt" min="0" max="65" value="45" oninput="setGpsTilt(this.value)"></label>
             <button id="gps-recenter" onclick="gpsRecenter()" title="Recentrer sur ma position">🎯</button>
+        </div>
+        <div class="gps-row">
+            <button id="gps-compass" onclick="toggleCompassMode()">🧭 Nord en haut</button>
+            <span id="gps-compass-msg" style="font-size:10px;color:#555;flex:1"></span>
         </div>
         <div class="gps-credit">© OpenStreetMap · OpenTopoMap-R · IGN · Esri</div>
     </div>
@@ -1371,13 +1376,68 @@
         let gpsMode = false, gpsWatchId = null, gpsMarker = null, gpsAcc = null, gpsFollow = true, gpsLast = null;
         let gpsLastFollow = 0, gpsCentered = false, gpsTimer = null, gpsWake = null, gpsDenied = false, gpsRestartAt = 0;
 
-        function setGpsTilt(deg) {
-            deg = Number(deg) || 0;
+        // Inclinaison (rotateX) + rotation selon le cap (rotateZ, mode « Cap en haut »), appliquées ensemble au conteneur de la carte
+        let gpsTilt = 45, gpsRotation = 0, compassMode = 'north', compassH = null, compassOn = false, compassAcc = null, compassLastUi = 0;
+        const angleDiff = (a, b) => ((a - b + 540) % 360) - 180;
+
+        function applyGpsTransform() {
             const el = map.getContainer();
-            el.style.transform = deg > 0 ? `perspective(900px) rotateX(${deg}deg)` : '';
+            el.style.transform = (gpsTilt > 0 || gpsRotation) ? `perspective(900px) rotateX(${gpsTilt}deg) rotateZ(${-gpsRotation}deg)` : '';
             // fondu vers l'horizon : le bord lointain de la carte se dissout dans le ciel
-            const m = deg > 0 ? 'linear-gradient(to bottom, transparent 0%, #000 16%)' : '';
+            const m = gpsTilt > 0 ? 'linear-gradient(to bottom, transparent 0%, #000 16%)' : '';
             el.style.webkitMaskImage = m; el.style.maskImage = m;
+        }
+        function setGpsTilt(deg) { gpsTilt = Number(deg) || 0; applyGpsTransform(); }
+
+        // Cap utilisé : boussole si disponible, sinon cap GPS (seulement quand on se déplace)
+        function currentHeading() {
+            if (compassH !== null) return compassH;
+            const c = gpsLast && gpsLast.c;
+            if (c && typeof c.heading === 'number' && !isNaN(c.heading) && (c.speed || 0) > 1) return c.heading;
+            return null;
+        }
+        function updateHeadingUI(force) {
+            const h = currentHeading(), rot = document.getElementById('gps-rot');
+            if (rot) { rot.classList.toggle('has-heading', h !== null); if (h !== null) rot.style.transform = `rotate(${h}deg)`; }
+            if (compassMode === 'heading' && h !== null) {
+                if (force || Math.abs(angleDiff(h, gpsRotation)) >= 1) { gpsRotation = h; applyGpsTransform(); }
+            } else if (gpsRotation !== 0) { gpsRotation = 0; applyGpsTransform(); }
+        }
+        function compassMsg(t) { const el = document.getElementById('gps-compass-msg'); if (el) el.textContent = t; }
+        function setCompassBtn() { document.getElementById('gps-compass').textContent = compassMode === 'heading' ? '⬆️ Cap en haut' : '🧭 Nord en haut'; }
+        function toggleCompassMode() {
+            compassMode = compassMode === 'north' ? 'heading' : 'north';
+            // En « Cap en haut » la carte est tournée : le glissement du doigt serait de travers, donc désactivé (la carte suit ta position)
+            if (compassMode === 'heading') { map.dragging.disable(); gpsFollow = true; gpsLastFollow = 0; document.getElementById('gps-recenter').style.background = '#007AFF'; if (gpsLast) map.panTo(gpsLast.ll, { animate: false }); }
+            else map.dragging.enable();
+            setCompassBtn(); updateHeadingUI(true);
+        }
+
+        function onOrient(e) {
+            let h = null;
+            if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)) { h = e.webkitCompassHeading; compassAcc = typeof e.webkitCompassAccuracy === 'number' ? e.webkitCompassAccuracy : null; } // iOS
+            else if (e.absolute && typeof e.alpha === 'number') h = (360 - e.alpha) % 360;                                                                                                              // Android
+            if (h === null) return;
+            const ang = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle : (window.orientation || 0);
+            h = (h + ang + 360) % 360;
+            // lissage circulaire : évite que la flèche et la carte tremblent
+            compassH = compassH === null ? h : (((compassH + angleDiff(h, compassH) * 0.2) % 360) + 360) % 360;
+            const now = performance.now(); if (now - compassLastUi < 100) return; compassLastUi = now;
+            updateHeadingUI(false);
+        }
+        // À appeler directement depuis un appui (iOS exige un geste de l'utilisateur pour autoriser la boussole)
+        function startCompass() {
+            const D = window.DeviceOrientationEvent;
+            const attach = () => { compassOn = true; window.addEventListener('deviceorientation', onOrient, true); window.addEventListener('deviceorientationabsolute', onOrient, true); compassMsg(''); };
+            if (!D) { compassMsg('Boussole indisponible'); return; }
+            if (typeof D.requestPermission === 'function') {
+                D.requestPermission().then(r => { if (r === 'granted') attach(); else compassMsg('Boussole refusée : Réglages > Safari > Avancé > Données de mouvement et d’orientation'); })
+                    .catch(() => compassMsg('Boussole indisponible (HTTPS requis)'));
+            } else attach();
+        }
+        function stopCompass() {
+            window.removeEventListener('deviceorientation', onOrient, true); window.removeEventListener('deviceorientationabsolute', onOrient, true);
+            compassOn = false; compassH = null; compassAcc = null; gpsRotation = 0;
         }
 
         function gpsRenderInfo() {
@@ -1386,7 +1446,7 @@
             const c = gpsLast.c, age = Math.max(0, Math.round((Date.now() - gpsLast.t) / 1000));
             const alt = typeof c.altitude === 'number' ? Math.round(c.altitude) + ' m' : '–';
             const spd = typeof c.speed === 'number' && c.speed >= 0 ? (c.speed * 3.6).toFixed(1) + ' km/h' : '–';
-            info.innerHTML = `<b>±${Math.round(c.accuracy)} m</b> · alt ${alt} · ${spd} · <span style="color:${age > 8 ? '#d00' : '#080'}">il y a ${age} s</span>`;
+            info.innerHTML = `<b>±${Math.round(c.accuracy)} m</b> · alt ${alt} · ${spd} · <span style="color:${age > 8 ? '#d00' : '#080'}">il y a ${age} s</span>${compassOn && compassAcc !== null && (compassAcc < 0 || compassAcc > 30) ? ' · ⚠️ boussole à calibrer (mouvement en 8)' : ''}`;
         }
 
         function gpsStartWatch() {
@@ -1412,12 +1472,7 @@
                 gpsMarker = L.marker(ll, { icon: L.divIcon({ className: 'gps-icon', html: '<div class="gps-rot" id="gps-rot"><div class="gps-arrow"></div><div class="gps-dot"></div></div>', iconSize: [28, 28], iconAnchor: [14, 14] }), interactive: false, keyboard: false, zIndexOffset: 1000 }).addTo(map);
                 gpsAcc = L.circle(ll, { radius: c.accuracy || 20, color: '#007AFF', weight: 1, fillColor: '#007AFF', fillOpacity: 0.12, interactive: false }).addTo(map);
             } else { gpsMarker.setLatLng(ll); gpsAcc.setLatLng(ll); gpsAcc.setRadius(c.accuracy || 20); }
-            const rot = document.getElementById('gps-rot');
-            if (rot) {
-                const hasH = typeof c.heading === 'number' && !isNaN(c.heading) && (c.speed || 0) > 0.5;
-                rot.classList.toggle('has-heading', hasH);
-                if (hasH) rot.style.transform = `rotate(${c.heading}deg)`;
-            }
+            updateHeadingUI(true);
             if (gpsFollow && (!gpsCentered || now - gpsLastFollow >= GPS_FOLLOW_MS)) {
                 gpsLastFollow = now;
                 if (!gpsCentered) { gpsCentered = true; map.setView(ll, Math.max(map.getZoom(), 15), { animate: false }); }
@@ -1448,10 +1503,11 @@
 
         function startGps() {
             if (!navigator.geolocation) { alert('Géolocalisation indisponible sur cet appareil.'); return; }
+            startCompass();   // en premier : doit partir directement de l'appui sur le bouton
             if (activeTool === 'ruler') toggleRuler();
             if (activeTool === 'pencil') togglePencil();
             closeProfile();
-            gpsMode = true; gpsFollow = true; gpsLast = null; gpsCentered = false; gpsLastFollow = 0; gpsDenied = false;
+            gpsMode = true; gpsRotation = 0; setCompassBtn(); if (compassMode === 'heading') map.dragging.disable(); gpsFollow = true; gpsLast = null; gpsCentered = false; gpsLastFollow = 0; gpsDenied = false;
             document.body.classList.add('gps-on');
             document.getElementById('btn-gps').style.background = '#34c759';
             document.getElementById('gps-hud').style.display = 'block';
@@ -1467,7 +1523,7 @@
         }
 
         function stopGps() {
-            gpsMode = false;
+            gpsMode = false; stopCompass(); map.dragging.enable();
             if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
             clearInterval(gpsTimer); gpsTimer = null;
             if (gpsMarker) { map.removeLayer(gpsMarker); gpsMarker = null; }
